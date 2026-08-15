@@ -90,7 +90,7 @@ export const Login: React.FC = () => {
       <Paper variant="outlined" sx={{ p: 5, maxWidth: 420, width: '100%', borderTop: '3px solid', borderColor: 'primary.main' }}>
         <Box sx={{ textAlign: 'center', mb: 3 }}>
           <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2 }}>
-            <img src="/img/favicon.ico" alt="PeptideLab" style={{ width: 48, height: 48 }} />
+            <img src="/img/peptidelab.png" alt="PeptideLab" style={{ width: 50, height: 50 }} />
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
             Welcome back

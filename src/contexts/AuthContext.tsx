@@ -12,6 +12,7 @@ interface AuthContextData {
   login: (email: string, pass: string) => Promise<any>;
   registerAccount: (email: string, pass: string) => Promise<any>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -46,8 +47,16 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
 
   const registerAccount = async (email: string, pass: string) => {
     const { data } = await api.post('/auth/register', { email, password: pass });
-    if (data) {
-      return await login(email, pass);
+    if (data && data.access_token) {
+      setSession({ access_token: data.access_token });
+      setAuthToken(data.access_token);
+      try {
+        const payloadStr = atob(data.access_token.split('.')[1]);
+        const payload = JSON.parse(payloadStr);
+        setUser({ id: payload.sub, email });
+      } catch (e) {
+        setUser({ id: '', email });
+      }
     }
     return data;
   };
@@ -66,8 +75,20 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
 
+  const deleteAccount = async () => {
+    try {
+      if (session?.access_token) {
+        await api.delete('/auth/account');
+      }
+    } finally {
+      setSession(null);
+      setUser(null);
+      setAuthToken(null);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, login, registerAccount, logout, isAuthenticated: !!session, isLoading }}>
+    <AuthContext.Provider value={{ session, user, login, registerAccount, logout, deleteAccount, isAuthenticated: !!session, isLoading }}>
       {!isLoading && children}
     </AuthContext.Provider>
   );

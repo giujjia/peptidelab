@@ -65,8 +65,11 @@ async function request(method: string, endpoint: string, data?: any, config: Api
       errorData = errorText || `HTTP error ${response.status}`;
     }
     
-    // Simulate axios error structure
-    const error = new Error(`Request failed with status code ${response.status}`);
+    // Simulate axios error structure with detailed message
+    const detailMsg = typeof errorData === 'object' && errorData?.detail 
+      ? (typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail))
+      : `Request failed with status code ${response.status}`;
+    const error = new Error(detailMsg);
     (error as any).response = { data: errorData, status: response.status };
     throw error;
   }

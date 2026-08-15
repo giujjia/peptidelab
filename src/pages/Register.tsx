@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { TextField, Button, Box, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -26,10 +26,18 @@ export const Register: React.FC = () => {
     resolver: zodResolver(registerSchema),
   });
 
+  const [successMsg, setSuccessMsg] = useState('');
+
   const onSubmit = async (data: RegisterFormInputs) => {
+    setError('');
+    setSuccessMsg('');
     try {
-      await registerAccount(data.email, data.password);
-      navigate('/dashboard');
+      const res = await registerAccount(data.email, data.password);
+      if (res && res.is_verified === false) {
+        setSuccessMsg('Conta criada com sucesso! Um e-mail de verificação foi enviado para o seu endereço. Por favor, confirme seu e-mail para acessar.');
+      } else {
+        navigate('/');
+      }
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'An error occurred during registration');
     }
@@ -47,7 +55,7 @@ export const Register: React.FC = () => {
       <Paper variant="outlined" sx={{ p: 5, maxWidth: 420, width: '100%', borderTop: '3px solid', borderColor: 'primary.main' }}>
         <Box sx={{ textAlign: 'center', mb: 3 }}>
           <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2 }}>
-            <img src="/img/favicon.ico" alt="PeptideLab" style={{ width: 48, height: 48 }} />
+            <img src="/img/peptidelab.png" alt="PeptideLab" style={{ width: 48, height: 48 }} />
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
             Create an Account
@@ -58,6 +66,7 @@ export const Register: React.FC = () => {
         </Box>
 
         <Box component="form" onSubmit={handleSubmit(onSubmit)}>
+          {successMsg && <Alert severity="info" sx={{ mb: 2 }}>{successMsg}</Alert>}
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <TextField
             fullWidth

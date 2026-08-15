@@ -3,6 +3,9 @@ import { Box, Typography, Button, Tabs, Tab, TextField, CircularProgress } from 
 import { FileDropzone } from '../FileDropzone';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import DownloadIcon from '@mui/icons-material/Download';
+import { api } from '../../services/api';
+import { downloadBlob } from '../../utils/download';
 
 interface JobFormProps {
   currentFormat: string;
@@ -118,8 +121,25 @@ export const JobForm: React.FC<JobFormProps> = ({
           variant="outlined"
           onClick={handleReset}
           sx={{ minWidth: 0, p: 1 }}
+          title="Reset form"
         >
           <RefreshIcon fontSize="small" />
+        </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<DownloadIcon fontSize="small" />}
+          onClick={async () => {
+            try {
+              const res = await api.get('/processor/example-file', { responseType: 'blob' });
+              downloadBlob(new Blob([res.data]), 'peptide_processor_example.tsv');
+            } catch (err) {
+              console.error("Failed to download example file", err);
+            }
+          }}
+          sx={{ textTransform: 'none', fontWeight: 600 }}
+        >
+          Sample File
         </Button>
         <Button
           startIcon={<HelpOutlineIcon />}

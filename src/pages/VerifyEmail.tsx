@@ -1,0 +1,89 @@
+import React, { useEffect, useState } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
+import { Box, Paper, Typography, Button, CircularProgress, Alert } from '@mui/material';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { api } from '../services/api';
+
+export const VerifyEmail: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+
+  const [loading, setLoading] = useState(true);
+  const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      setErrorMsg('No verification token provided.');
+      return;
+    }
+
+    const verify = async () => {
+      try {
+        await api.post('/auth/verify-email', { token });
+        setSuccess(true);
+      } catch (err: any) {
+        setErrorMsg(err.response?.data?.detail || err.message || 'Failed to verify email token.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verify();
+  }, [token]);
+
+  return (
+    <Box
+      sx={{
+        minHeight: 'calc(100vh - 96px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'background.default',
+        px: 2,
+      }}
+    >
+      <Paper variant="outlined" sx={{ p: 5, maxWidth: 450, width: '100%', textAlign: 'center', borderRadius: 3 }}>
+        {loading ? (
+          <Box sx={{ py: 4 }}>
+            <CircularProgress color="primary" size={48} sx={{ mb: 2 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Verifying your email...
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Please wait while we validate your token.
+            </Typography>
+          </Box>
+        ) : success ? (
+          <Box sx={{ py: 2 }}>
+            <CheckCircleOutlineIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
+            <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+              Email Verified!
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+              Your account has been successfully verified. You can now log in to access PeptideLab.
+            </Typography>
+            <Button variant="contained" color="primary" component={Link} to="/login" fullWidth sx={{ py: 1.2 }}>
+              Sign In to Your Account
+            </Button>
+          </Box>
+        ) : (
+          <Box sx={{ py: 2 }}>
+            <ErrorOutlineIcon sx={{ fontSize: 64, color: 'error.main', mb: 2 }} />
+            <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+              Verification Failed
+            </Typography>
+            <Alert severity="error" sx={{ mb: 3, textAlign: 'left' }}>
+              {errorMsg}
+            </Alert>
+            <Button variant="outlined" color="primary" component={Link} to="/login" fullWidth sx={{ py: 1.2 }}>
+              Back to Login
+            </Button>
+          </Box>
+        )}
+      </Paper>
+    </Box>
+  );
+};

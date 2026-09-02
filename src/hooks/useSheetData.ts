@@ -31,7 +31,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       }
     }
     fetchJobs();
-  }, [fetchJobs]);
+  }, [fetchJobs, notify]);
 
   const fetchSheetData = useCallback(async (sheet: string, page: number = 1) => {
     setLoadingSheet(true);
@@ -47,7 +47,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     } finally {
       setLoadingSheet(false);
     }
-  }, [sessionId]);
+  }, [sessionId, notify]);
 
   const handleUpload = async (files: File[]) => {
     setUploading(true);
@@ -67,6 +67,32 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     }
   };
 
+  const handleImportFiles = async (files: File[]) => {
+    if (!sessionId || files.length === 0) return;
+    setLoadingSheet(true);
+    const formData = new FormData();
+    formData.append('session_id', sessionId);
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    try {
+      const res = await api.post('/analysis/import-files', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setSheetsInfo(res.data.sheets);
+      const firstNew = res.data.new_sheets?.[0];
+      if (firstNew) {
+        setActiveSheet(firstNew);
+        await fetchSheetData(firstNew, 1);
+      }
+      notify(res.data.message || 'Files imported successfully!', 'success');
+    } catch (err: any) {
+      notify(err.response?.data?.detail || 'Failed to import files', 'error');
+    } finally {
+      setLoadingSheet(false);
+    }
+  };
+
   const handleLoadExample = async () => {
     setUploading(true);
     try {
@@ -74,6 +100,31 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       await processResponse(res.data);
     } catch (err: any) {
       notify(err.response?.data?.detail || 'Failed to load example', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleLoadCompareExample = async () => {
+    setUploading(true);
+    try {
+      const res = await api.post('/analysis/load-compare-example');
+      await processResponse(res.data);
+      notify('Compare datasets (Round 1 vs Round 2) loaded successfully!', 'success');
+    } catch (err: any) {
+      notify(err.response?.data?.detail || 'Failed to load compare example', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleLoadJobSession = async (jobId: string) => {
+    setUploading(true);
+    try {
+      const res = await api.post(`/analysis/load-job-session/${jobId}`);
+      await processResponse(res.data);
+    } catch (err: any) {
+      notify(err.response?.data?.detail || 'Failed to load job', 'error');
     } finally {
       setUploading(false);
     }
@@ -117,7 +168,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
 
   return {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleLoadExample, handleDownload, handleBack,
-    handleNumericFilter
+    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleDownload, handleBack,
+    handleNumericFilter, processResponse
   };
 }

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Typography, Button, TextField, InputAdornment, Popover, Divider, FormControlLabel, Checkbox } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import DownloadIcon from '@mui/icons-material/Download';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 
 interface HeaderBarProps {
   sheetName: string;
@@ -16,20 +19,47 @@ interface HeaderBarProps {
   onHideAllColumns: () => void;
   onDownload: () => void;
   onNewAnalysis: () => void;
+  onOpenJobsDrawer?: () => void;
+  onImportFiles?: (files: File[]) => void;
 }
+
+const headerOutlinedButtonSx = {
+  textTransform: 'none',
+  fontWeight: 600,
+  fontSize: '0.8125rem',
+  borderRadius: 1.5,
+  height: 36,
+  px: 1.5,
+  borderColor: 'divider',
+  color: 'text.primary',
+  bgcolor: 'background.paper',
+  '&:hover': {
+    borderColor: 'primary.main',
+    color: 'primary.main',
+    bgcolor: 'rgba(82, 72, 162, 0.04)',
+  },
+};
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   sheetName, totalRows, searchQuery, setSearchQuery,
   filteredColumns, hiddenColumns, onToggleColumn, onShowAllColumns, onHideAllColumns,
-  onDownload, onNewAnalysis
+  onDownload, onNewAnalysis, onOpenJobsDrawer, onImportFiles
 }) => {
   const [colAnchor, setColAnchor] = useState<null | HTMLElement>(null);
   const [columnSearch, setColumnSearch] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const displayColumns = filteredColumns.filter(c => !columnSearch.trim() || c.toLowerCase().includes(columnSearch.toLowerCase()));
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && onImportFiles) {
+      onImportFiles(Array.from(e.target.files));
+      e.target.value = '';
+    }
+  };
+
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 1.5 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
       <Box>
         <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>Data Analysis</Typography>
         <Typography variant="caption" color="text.secondary">
@@ -50,19 +80,53 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             ),
             sx: { 
               fontSize: '13px', 
-              bgcolor: 'white',
+              bgcolor: 'background.default',
               borderRadius: 1.5,
-              width: 200,
+              width: 180,
             }
           }}
         />
+
+        {onImportFiles && (
+          <>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+            />
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<NoteAddIcon />}
+              onClick={() => fileInputRef.current?.click()}
+              sx={headerOutlinedButtonSx}
+            >
+              Import File
+            </Button>
+          </>
+        )}
+
+        {onOpenJobsDrawer && (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<FolderOpenIcon />}
+            onClick={onOpenJobsDrawer}
+            sx={headerOutlinedButtonSx}
+          >
+            My Jobs
+          </Button>
+        )}
 
         <Button
           variant="outlined"
           size="small"
           startIcon={<ViewColumnIcon />}
           onClick={(e) => setColAnchor(e.currentTarget)}
-          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 1.5, height: 36 }}
+          sx={headerOutlinedButtonSx}
         >
           Columns
         </Button>
@@ -131,11 +195,26 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           size="small"
           startIcon={<DownloadIcon />}
           onClick={onDownload}
-          sx={{ textTransform: 'none', fontWeight: 600 }}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: '0.8125rem',
+            borderRadius: 1.5,
+            height: 36,
+            px: 1.75,
+            boxShadow: 'none',
+          }}
         >
           Download
         </Button>
-        <Button variant="outlined" size="small" onClick={onNewAnalysis} sx={{ textTransform: 'none' }}>
+
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<RestartAltIcon />}
+          onClick={onNewAnalysis}
+          sx={headerOutlinedButtonSx}
+        >
           New Analysis
         </Button>
       </Box>

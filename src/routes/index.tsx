@@ -23,9 +23,10 @@ export const AppRoutes: React.FC = () => {
         <Route path="/about" element={<About />} />
 
         <Route path="/processor" element={<Processor />} />
+        <Route path="/analysis" element={<AnalysisTool />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/analysis" element={<AnalysisTool />} />
+          {/* Rotas estritamente autenticadas */}
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

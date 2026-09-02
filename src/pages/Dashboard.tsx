@@ -88,6 +88,7 @@ export const Dashboard: React.FC = () => {
             </Button>
             <Button
               variant="outlined"
+              onClick={() => navigate('/about')}
               sx={{
                 borderColor: (theme) => alpha(theme.palette.secondary.main, 0.4),
                 color: "secondary.main",

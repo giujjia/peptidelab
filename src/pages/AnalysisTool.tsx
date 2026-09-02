@@ -7,6 +7,7 @@ import { EsmPopover } from '../components/analysis/EsmPopover';
 import { IdMappingPopover } from '../components/analysis/IdMappingPopover';
 import { ComparePopover } from '../components/analysis/ComparePopover';
 import { CrossValPopover } from '../components/analysis/CrossValPopover';
+import { JobsDrawer } from '../components/analysis/JobsDrawer';
 import { AvailableJob } from '../types';
 
 import { useSheetData } from '../hooks/useSheetData';
@@ -18,6 +19,7 @@ import { HeaderBar } from '../components/analysis/HeaderBar';
 import { SheetTabs } from '../components/analysis/SheetTabs';
 import { DataTable } from '../components/analysis/DataTable';
 import { PaginationControl } from '../components/analysis/PaginationControl';
+import { TaskProgressWidget, TaskInfo } from '../components/common/TaskProgressWidget';
 
 const FILTER_CONFIG = {
   'add-genes': { title: 'Add Gene Information', description: 'Automatically fetches and maps gene symbols from the NCBI Entrez database based on your protein identifiers (e.g. GI or Locus).' },
@@ -30,6 +32,8 @@ export const AnalysisTool: React.FC = () => {
   const { notify } = useNotification();
   
   const [availableJobs, setAvailableJobs] = useState<AvailableJob[]>([]);
+  const [jobsDrawerOpen, setJobsDrawerOpen] = useState(false);
+
   const fetchJobs = useCallback(async () => {
     try {
       const res = await api.get('/analysis/jobs');
@@ -45,7 +49,8 @@ export const AnalysisTool: React.FC = () => {
 
   const {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleLoadExample, handleDownload, handleBack
+    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleDownload, handleBack,
+    handleNumericFilter
   } = useSheetData(notify, fetchJobs);
 
   const {
@@ -66,80 +71,47 @@ export const AnalysisTool: React.FC = () => {
 
   // ESM-1v State
   const [esmAnchorEl, setEsmAnchorEl] = useState<null | HTMLElement>(null);
-  const [esmTask, setEsmTask] = useState<{
-    taskId: string;
-    status: string;
-    progress: number;
-    total: number;
-  } | null>(null);
+  const [esmTask, setEsmTask] = useState<TaskInfo | null>(null);
 
-  // ID Mapping State
+  // ID Mapping & Compare State
   const [idMappingAnchorEl, setIdMappingAnchorEl] = useState<null | HTMLElement>(null);
   const [idMappingRunning, setIdMappingRunning] = useState(false);
-
-  // Compare Datasets / Cross-Validation State
   const [compareAnchorEl, setCompareAnchorEl] = useState<null | HTMLElement>(null);
   const [crossValAnchorEl, setCrossValAnchorEl] = useState<null | HTMLElement>(null);
   const [compareTaskId, setCompareTaskId] = useState<string | null>(null);
 
-  // ESM-1v Polling
+  // Task listener (ESM-1v)
   useEffect(() => {
-    if (!esmTask || esmTask.status === 'done' || esmTask.status === 'error') return;
-    let failCount = 0;
-    const interval = setInterval(async () => {
-      try {
-        const res = await api.get(`/analysis/esm-status/${esmTask.taskId}`);
-        const data = res.data;
-        failCount = 0;
-        setEsmTask(prev => {
-          if (!prev) return null;
-          return { ...prev, status: data.status, progress: data.progress, total: data.total };
-        });
-        if (data.status === 'done') {
-          clearInterval(interval);
-          notify('ESM-1v predictions completed!', 'success');
-          fetchSheetData(activeSheet, sheetData?.page || 1);
-        } else if (data.status === 'error') {
-          clearInterval(interval);
-          notify(`ESM-1v Error: ${data.error}`, 'error');
-        }
-      } catch (err) {
-        failCount++;
-        if (failCount >= 5) {
-          clearInterval(interval);
-          setEsmTask(null);
-          notify('ESM-1v polling stopped due to network errors', 'error');
-        }
+    const handleTaskUpdated = (e: any) => {
+      const detail = e.detail;
+      if (!detail) return;
+      if (detail.status === 'done') {
+        fetchSheetData(activeSheet, sheetData?.page || 1);
       }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [esmTask, activeSheet, fetchSheetData, notify, sheetData?.page]);
+    };
+    window.addEventListener('task_updated', handleTaskUpdated);
+    return () => window.removeEventListener('task_updated', handleTaskUpdated);
+  }, [activeSheet, sheetData?.page, fetchSheetData]);
 
-
-  // Compare Polling
+  // Polling para Compare & Cross-Validation
   useEffect(() => {
     if (!compareTaskId) return;
+
     let failCount = 0;
     const interval = setInterval(async () => {
       try {
-        const res = await api.get(`/analysis/compare-status/${compareTaskId}`);
-        const data = res.data;
+        const { data } = await api.get(`/analysis/compare-status/${compareTaskId}`);
         failCount = 0;
         if (data.status === 'done') {
           clearInterval(interval);
           setCompareTaskId(null);
-          notify(`Intersection complete! New tab: "${data.nova_aba}"`, 'success');
-          // Atualiza sheetsInfo para incluir nova aba
-          const infoRes = await api.get(`/analysis/sheet/${sessionId}/${data.nova_aba}`);
-          if (infoRes.data) {
-            setSheetsInfo(prev => ({
+          notify(`Comparison complete! New tab: "${data.nova_aba}"`, 'success');
+          
+          if (data.nova_aba) {
+            setSheetsInfo((prev: any) => ({
               ...prev,
-              [data.nova_aba]: {
-                columns: infoRes.data.all_columns || [],
-                row_count: infoRes.data.total_rows || 0,
-              }
+              [data.nova_aba]: { row_count: 0, columns: [] }
             }));
-            // Troca automaticamente para a nova aba criada
             fetchSheetData(data.nova_aba, 1);
           }
         } else if (data.status === 'error') {
@@ -172,83 +144,77 @@ export const AnalysisTool: React.FC = () => {
         mutation_type: res.data.mutation_type,
         dbpepmutref_rows: res.data.dbpepmutref_rows,
       });
+      notify('Job connected to active session successfully!', 'success');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to connect job');
+      notify(err.response?.data?.detail || 'Failed to connect job', 'error');
     } finally {
       setConnectingJob(false);
     }
   };
 
   const handleDisconnectJob = async () => {
+    if (!sessionId) return;
     try {
-      await api.post('/analysis/disconnect-job', {
-        session_id: sessionId,
-        mapping: {},
-      });
+      await api.post('/analysis/disconnect-job', { session_id: sessionId, target_column: '' });
+      setConnectedJobId('');
+      setConnectedJobInfo(null);
+      notify('Job disconnected', 'info');
     } catch (err) {
       console.error(err);
     }
-    setConnectedJobId('');
-    setConnectedJobInfo(null);
   };
 
-  const handleFilterClick = (event: React.MouseEvent<HTMLElement>, type: 'add-genes' | 'add-protein-id' | 'remove-contaminants' | 'filter-numeric') => {
+  const handleFilterClick = (e: React.MouseEvent<HTMLElement>, type: 'add-genes' | 'add-protein-id' | 'remove-contaminants' | 'filter-numeric') => {
     setFilterDialogType(type);
-    setFilterAnchorEl(event.currentTarget);
+    setFilterAnchorEl(e.currentTarget);
   };
 
   const handleFilterConfirm = async (params: Record<string, string>) => {
     setFilterAnchorEl(null);
+    if (!sessionId) return;
+
+    if (filterDialogType === 'filter-numeric') {
+      const thresholdNum = parseFloat(params.threshold);
+      handleNumericFilter(params.target_column, params.operator, isNaN(thresholdNum) ? 0.01 : thresholdNum);
+      return;
+    }
+
     setFilterLoading(true);
     try {
-      const endpoint = `/analysis/${filterDialogType}`;
-      const payload: any = {
-        session_id: sessionId,
-        ...params
-      };
-      
-      if (filterDialogType === 'add-protein-id') {
-        payload.target_sheet = activeSheet;
-      } else {
-        payload.sheet_name = activeSheet;
+      let res;
+      if (filterDialogType === 'add-genes') {
+        res = await api.post('/analysis/add-genes', {
+          session_id: sessionId,
+          sheet_name: activeSheet,
+          target_column: params.target_column,
+        });
+      } else if (filterDialogType === 'add-protein-id') {
+        res = await api.post('/analysis/add-protein-id', {
+          session_id: sessionId,
+          sheet_name: activeSheet,
+          target_column: params.target_column,
+        });
+      } else if (filterDialogType === 'remove-contaminants') {
+        res = await api.post('/analysis/remove-contaminants', {
+          session_id: sessionId,
+          sheet_name: activeSheet,
+          target_column: params.target_column,
+          keyword: params.keyword || 'contaminant',
+        });
       }
-      
-      const res = await api.post(endpoint, payload);
-      
-      notify(res.data.message || 'Filter applied successfully', 'success');
-      
-      if (filterDialogType === 'add-protein-id' || payload.sheet_name === activeSheet) {
+      if (res?.data?.data) {
         setSheetData(res.data.data);
+        notify(res.data.message, 'success');
       }
-      
-      if (res.data.data && res.data.data.all_columns) {
-        setSheetsInfo(prev => ({
-          ...prev,
-          [activeSheet]: {
-            ...prev[activeSheet],
-            columns: res.data.data.all_columns,
-            row_count: res.data.data.total_rows
-          }
-        }));
-      }
-
     } catch (err: any) {
-      console.error(err);
-      let errorMsg = 'Failed to apply filter';
-      const detail = err.response?.data?.detail;
-      if (typeof detail === 'string') {
-        errorMsg = detail;
-      } else if (Array.isArray(detail) && detail.length > 0 && detail[0].msg) {
-        errorMsg = detail[0].msg;
-      }
-      notify(errorMsg, 'error');
+      notify(err.response?.data?.detail || 'Failed to apply filter', 'error');
     } finally {
       setFilterLoading(false);
     }
   };
 
-  const handleEsmClick = (event: React.MouseEvent<HTMLElement>) => {
-    setEsmAnchorEl(event.currentTarget);
+  const handleEsmClick = (e: React.MouseEvent<HTMLElement>) => {
+    setEsmAnchorEl(e.currentTarget);
   };
 
   const handleEsmConfirm = async (params: {
@@ -256,41 +222,54 @@ export const AnalysisTool: React.FC = () => {
     col_position: string;
     col_old_aa: string;
     col_new_aa: string;
+    notify_email?: boolean;
   }) => {
     setEsmAnchorEl(null);
     try {
-      const res = await api.post('/analysis/run-esm1v', {
+      const res = await api.post('/analysis/run-esm', {
         session_id: sessionId,
         sheet_name: activeSheet,
-        ...params
+        ...params,
       });
       setEsmTask({
         taskId: res.data.task_id,
+        taskType: 'esm',
         status: 'pending',
         progress: 0,
-        total: res.data.total_rows
+        total: res.data.total_rows,
       });
-      notify('ESM-1v predictions task started in background', 'info');
+      notify('ESM-1v task scheduled successfully in background!', 'success');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to start ESM-1v task', 'error');
+      notify(err.response?.data?.detail || 'Failed to start ESM-1v', 'error');
     }
   };
 
-  const handleIdMappingConfirm = async (params: { col_origin: string }) => {
+  const handleCancelTask = async (taskId: string) => {
+    try {
+      await api.post(`/analysis/cancel-esm/${taskId}`);
+      setEsmTask((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
+      notify('Task cancelled', 'info');
+    } catch (err: any) {
+      notify(err.response?.data?.detail || 'Failed to cancel task', 'error');
+    }
+  };
+
+  const handleIdMappingConfirm = async (col_origin: string) => {
     setIdMappingAnchorEl(null);
     setIdMappingRunning(true);
     try {
-      const taskRes = await api.post('/analysis/run-id-mapping', {
+      const res = await api.post('/analysis/run-id-mapping', {
         session_id: sessionId,
         sheet_name: activeSheet,
-        col_origin: params.col_origin,
+        col_origin,
       });
-      const taskId = taskRes.data.task_id;
+      const taskId = res.data.task_id;
+      notify('UniProt ID Mapping running in background...', 'info');
+
       let failCount = 0;
       const poll = setInterval(async () => {
         try {
-          const statusRes = await api.get(`/analysis/id-mapping-status/${taskId}`);
-          const status = statusRes.data;
+          const { data: status } = await api.get(`/analysis/id-mapping-status/${taskId}`);
           failCount = 0;
           if (status.status === 'done') {
             clearInterval(poll);
@@ -349,7 +328,6 @@ export const AnalysisTool: React.FC = () => {
         session_id: sessionId,
         ...params,
       });
-      // Usa a mesma rotina de polling que compare
       setCompareTaskId(res.data.task_id);
       notify('Cross-validation started in background...', 'info');
     } catch (err: any) {
@@ -366,11 +344,24 @@ export const AnalysisTool: React.FC = () => {
 
   if (!sessionId) {
     return (
-      <UploadScreen 
-        uploading={uploading} 
-        onUpload={handleUpload} 
-        onLoadExample={handleLoadExample} 
-      />
+      <>
+        <UploadScreen 
+          uploading={uploading} 
+          onUpload={handleUpload} 
+          onLoadExample={handleLoadExample}
+          onLoadCompareExample={handleLoadCompareExample}
+          onOpenJobsDrawer={() => setJobsDrawerOpen(true)}
+        />
+        <JobsDrawer
+          open={jobsDrawerOpen}
+          onClose={() => setJobsDrawerOpen(false)}
+          onLoadJobAsSession={handleLoadJobSession}
+          onConnectJobToSession={handleConnectJob}
+          currentSessionId={sessionId}
+          connectedJobId={connectedJobId}
+          onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
+        />
+      </>
     );
   }
 
@@ -421,6 +412,8 @@ export const AnalysisTool: React.FC = () => {
           onHideAllColumns={() => handleHideAll(allColumns)}
           onDownload={handleDownload}
           onNewAnalysis={handleNewAnalysis}
+          onOpenJobsDrawer={() => setJobsDrawerOpen(true)}
+          onImportFiles={handleImportFiles}
         />
 
         <SheetTabs 
@@ -479,12 +472,20 @@ export const AnalysisTool: React.FC = () => {
         onClose={() => setEsmAnchorEl(null)}
         onConfirm={handleEsmConfirm}
         columns={sheetData?.all_columns || []}
+        totalRows={sheetData?.total_rows || 0}
+      />
+
+      <TaskProgressWidget
+        task={esmTask}
+        onCancel={handleCancelTask}
+        onRefreshResults={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
+        onDismiss={() => setEsmTask(null)}
       />
 
       <IdMappingPopover
         anchorEl={idMappingAnchorEl}
         onClose={() => setIdMappingAnchorEl(null)}
-        onConfirm={handleIdMappingConfirm}
+        onConfirm={({ col_origin }) => handleIdMappingConfirm(col_origin)}
         columns={sheetData?.all_columns || []}
       />
 
@@ -504,6 +505,16 @@ export const AnalysisTool: React.FC = () => {
         sheets={Object.keys(sheetsInfo)}
         activeSheet={activeSheet}
         sheetsInfo={sheetsInfo}
+      />
+
+      <JobsDrawer
+        open={jobsDrawerOpen}
+        onClose={() => setJobsDrawerOpen(false)}
+        onLoadJobAsSession={handleLoadJobSession}
+        onConnectJobToSession={handleConnectJob}
+        currentSessionId={sessionId}
+        connectedJobId={connectedJobId}
+        onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
       />
     </Box>
   );

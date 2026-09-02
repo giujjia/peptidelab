@@ -13,3 +13,4 @@ dist-ssr
 
 .env
 tsconfig.tsbuildinfo
+.directory

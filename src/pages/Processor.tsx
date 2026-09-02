@@ -111,6 +111,39 @@ export const Processor: React.FC = () => {
     }
   };
 
+
+
+  const handleRunExample = async () => {
+    setIsSubmitting(true);
+    try {
+      const response = await api.post(`/processor/run-example/${mutationType}`, {}, {
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data], { type: "application/zip" });
+      downloadBlob(blob, `peptidelab_example_${mutationType}.zip`);
+      notify(`Example for ${current.label} processed! Results downloaded without registering a permanent job.`, "success");
+    } catch (err: any) {
+      console.error("Error running example", err);
+      notify("Failed to process example");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLoadExampleText = async (): Promise<string> => {
+    try {
+      const res = await api.get(`/processor/examples/${mutationType}`);
+      if (res.data && res.data.content) {
+        notify(`Sample data loaded for ${current.label}`, "info");
+        return res.data.content;
+      }
+    } catch (err) {
+      console.error("Failed to load example text", err);
+      notify("Failed to load sample text");
+    }
+    return "";
+  };
+
   const handleViewJob = async (jobId: string) => {
     setViewJobLoading(true);
     setViewJobData(null);
@@ -179,8 +212,11 @@ export const Processor: React.FC = () => {
                 currentPlaceholder={current.placeholder}
                 isSubmitting={isSubmitting}
                 onSubmit={handleProcessData}
+                onRunExample={handleRunExample}
+                onLoadExampleText={handleLoadExampleText}
                 onShowHelp={() => setShowHelp(true)}
                 isAuthenticated={isAuthenticated}
+                mutationType={mutationType}
               />
             </Paper>
           </Grid>

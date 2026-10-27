@@ -130,6 +130,21 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     }
   };
 
+  // Reabre sessao existente pelo historico de tarefas ou pelo link do email
+  const handleReopenSession = async (targetSessionId: string) => {
+    setUploading(true);
+    try {
+      const res = await api.get(`/analysis/session/${targetSessionId}`);
+      await processResponse(res.data);
+      return res.data as { session_id: string; connected_job_id?: string | null };
+    } catch (err: any) {
+      notify(err.response?.data?.detail || 'Session not found or expired', 'error');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleDownload = async () => {
     try {
       const res = await api.get(`/analysis/download/${sessionId}`, { responseType: 'blob' });
@@ -168,7 +183,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
 
   return {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleDownload, handleBack,
+    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, handleBack,
     handleNumericFilter, processResponse
   };
 }

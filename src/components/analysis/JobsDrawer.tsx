@@ -52,6 +52,7 @@ interface JobsDrawerProps {
   currentSessionId?: string;
   connectedJobId?: string;
   onRefreshActiveSheet?: () => void;
+  onOpenSession?: (sessionId: string) => Promise<void>;
 }
 
 export const JobsDrawer: React.FC<JobsDrawerProps> = ({
@@ -62,6 +63,7 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
   currentSessionId,
   connectedJobId,
   onRefreshActiveSheet,
+  onOpenSession,
 }) => {
   const { user } = useAuth();
   const [tabIndex, setTabIndex] = useState<number>(0);
@@ -421,6 +423,26 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                       {formatDate(t.created_at)}
                     </Typography>
 
+                    {onOpenSession && currentSessionId !== t.session_id && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        color="primary"
+                        disabled={actionLoadingId === t.id}
+                        onClick={async () => {
+                          setActionLoadingId(t.id);
+                          try {
+                            await onOpenSession(t.session_id);
+                            onClose();
+                          } finally {
+                            setActionLoadingId(null);
+                          }
+                        }}
+                        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                      >
+                        Open Session
+                      </Button>
+                    )}
                     {t.status === 'done' && onRefreshActiveSheet && currentSessionId === t.session_id && (
                       <Button
                         size="small"

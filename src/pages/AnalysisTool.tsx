@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, LinearProgress, Typography } from '@mui/material';
 import { api } from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAuth } from '../contexts/AuthContext';
 import { FilterPopover } from '../components/analysis/FilterPopover';
 import { EsmPopover } from '../components/analysis/EsmPopover';
 import { IdMappingPopover } from '../components/analysis/IdMappingPopover';
@@ -49,7 +50,7 @@ export const AnalysisTool: React.FC = () => {
 
   const {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleDownload, handleBack,
+    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, handleBack,
     handleNumericFilter
   } = useSheetData(notify, fetchJobs);
 
@@ -215,6 +216,29 @@ export const AnalysisTool: React.FC = () => {
       setConnectingJob(false);
     }
   };
+
+  const handleOpenSession = useCallback(async (targetSessionId: string) => {
+    const data = await handleReopenSession(targetSessionId);
+    if (data) {
+      setConnectedJobId(data.connected_job_id || '');
+      setConnectedJobInfo(null);
+    }
+  }, [handleReopenSession]);
+
+  // Link do email traz ?session_id=; abre depois que a autenticacao foi restaurada
+  const { isLoading: authLoading } = useAuth();
+  const sessionFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (authLoading || sessionFromLinkRef.current) return;
+    sessionFromLinkRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const linkSessionId = params.get('session_id');
+    if (!linkSessionId) return;
+    params.delete('session_id');
+    const qs = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    handleOpenSession(linkSessionId);
+  }, [authLoading, handleOpenSession]);
 
   const handleDisconnectJob = async () => {
     if (!sessionId) return;
@@ -430,6 +454,7 @@ export const AnalysisTool: React.FC = () => {
           currentSessionId={sessionId}
           connectedJobId={connectedJobId}
           onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
+          onOpenSession={handleOpenSession}
         />
       </>
     );
@@ -585,6 +610,7 @@ export const AnalysisTool: React.FC = () => {
         currentSessionId={sessionId}
         connectedJobId={connectedJobId}
         onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
+        onOpenSession={handleOpenSession}
       />
     </Box>
   );

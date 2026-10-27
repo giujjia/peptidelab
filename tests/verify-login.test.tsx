@@ -131,7 +131,7 @@ describe('recuperacao de senha (I45)', () => {
       await pedido.promise;
     });
     // Fluxo novo continua na primeira etapa e sem mensagem do pedido antigo
-    expect(screen.queryByText('Reset code sent to your email. Enter your new password below.')).toBeNull();
+    expect(screen.queryByText('If an account exists, we sent a reset link to this email. Open the link, or paste the code from it below.')).toBeNull();
     expect(screen.queryByLabelText('Reset Token Code')).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import { Processor } from '../pages/Processor';
 import { AnalysisTool } from '../pages/AnalysisTool';
 import { About } from '../pages/About';
 import { VerifyEmail } from '../pages/VerifyEmail';
+import { ResetPassword } from '../pages/ResetPassword';
 import { Layout } from '../components/Layout';
 import { ProtectedRoute } from '../components/common/ProtectedRoute';
 
@@ -20,6 +21,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/about" element={<About />} />
 
         <Route path="/processor" element={<Processor />} />

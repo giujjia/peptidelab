@@ -7,12 +7,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { errorMessage } from '../services/errors';
-
-// Mesma regra do servidor para a nova senha
-const MIN_PASSWORD_LENGTH = 6;
+import { emailSchema, normalizeEmail, passwordLength, PASSWORD_MIN_LENGTH, EMAIL_PATTERN } from '../services/accountRules';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: emailSchema,
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -79,10 +77,10 @@ export const Login: React.FC = () => {
     setForgotLoading(true);
     setForgotMsg(null);
     try {
-      await api.post('/auth/forgot-password', { email: forgotEmail });
+      await api.post('/auth/forgot-password', { email: normalizeEmail(forgotEmail) });
       if (flow !== forgotFlowRef.current) return;
       setResetStep(2);
-      setForgotMsg({ text: 'Reset code sent to your email. Enter your new password below.', type: 'success' });
+      setForgotMsg({ text: 'If an account exists, we sent a reset link to this email. Open the link, or paste the code from it below.', type: 'success' });
     } catch (err: any) {
       if (flow !== forgotFlowRef.current) return;
       setForgotMsg({ text: errorMessage(err, 'Failed to request password reset'), type: 'error' });
@@ -233,8 +231,8 @@ export const Login: React.FC = () => {
                 size="small"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                error={newPassword !== '' && newPassword.length < MIN_PASSWORD_LENGTH}
-                helperText={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                error={newPassword !== '' && passwordLength(newPassword) < PASSWORD_MIN_LENGTH}
+                helperText={`At least ${PASSWORD_MIN_LENGTH} characters`}
               />
             </>
           )}
@@ -247,7 +245,7 @@ export const Login: React.FC = () => {
             <Button
               variant="contained"
               onClick={handleRequestReset}
-              disabled={forgotLoading || !forgotEmail}
+              disabled={forgotLoading || !EMAIL_PATTERN.test(normalizeEmail(forgotEmail))}
               sx={{ textTransform: 'none' }}
             >
               {forgotLoading ? 'Requesting...' : 'Next'}
@@ -256,7 +254,7 @@ export const Login: React.FC = () => {
             <Button
               variant="contained"
               onClick={handleConfirmReset}
-              disabled={forgotLoading || !resetToken || newPassword.length < MIN_PASSWORD_LENGTH}
+              disabled={forgotLoading || !resetToken || passwordLength(newPassword) < PASSWORD_MIN_LENGTH}
               sx={{ textTransform: 'none' }}
             >
               {forgotLoading ? 'Updating...' : 'Set New Password'}

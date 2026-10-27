@@ -6,11 +6,12 @@ import { TextField, Button, Box, Typography, Paper, Alert, Link as MuiLink } fro
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { errorMessage } from '../services/errors';
+import { emailSchema, newPasswordSchema } from '../services/accountRules';
 import { Link, useNavigate } from 'react-router-dom';
 
 const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: emailSchema,
+  password: newPasswordSchema,
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",

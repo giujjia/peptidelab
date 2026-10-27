@@ -121,8 +121,8 @@ export const Dashboard: React.FC = () => {
             <Grid xs={12} md={6}>
               <ToolCard
                 title="Peptide Processor"
-                desc="Process missense, indel, frameshift and silent mutations from text or file input"
-                features={["Multiple mutation types", "Upload CSV/Excel files", "Reference protein database", "Download results"]}
+                desc="Process missense, indel, frameshift and stop-loss mutations from text or file input"
+                features={["Multiple mutation types", "Upload text files (.txt, .tsv, .csv)", "Reference protein database", "Download results"]}
                 btnLabel="Access Tool"
                 btnVariant="contained"
                 accent="primary.main"
@@ -133,7 +133,7 @@ export const Dashboard: React.FC = () => {
               <ToolCard
                 title="Analysis Tool"
                 desc="Visualize and filter tabular proteomics data interactively"
-                features={["Multiple format support", "Advanced filters", "Column sorting", "Export filtered data"]}
+                features={["Upload .xlsx and .csv", "Advanced filters", "Column visibility and search", "Export sheets to Excel"]}
                 btnLabel="Open Analysis"
                 btnVariant="outlined"
                 accent="primary.light"

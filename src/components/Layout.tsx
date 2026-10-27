@@ -198,7 +198,7 @@ export const Layout: React.FC = () => {
         <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>Confirmar Exclusão de Conta</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Atenção: Esta ação é <strong>irreversível</strong>. Sua conta será desativada imediatamente e todos os seus dados e jobs serão expurgados definitivamente do sistema em 30 dias.
+            Sua conta será desativada imediatamente. Se você entrar de novo em até <strong>60 dias</strong>, ela é reativada. Depois desse prazo, a conta, os jobs, as tarefas de análise e os registros de e-mail ligados a ela são <strong>apagados definitivamente</strong>.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>

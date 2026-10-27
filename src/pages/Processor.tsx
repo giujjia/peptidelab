@@ -276,6 +276,7 @@ export const Processor: React.FC = () => {
           open={showHelp}
           onClose={() => setShowHelp(false)}
           format={current.format}
+          mutationType={mutationType}
         />
       </Container>
     </Box>

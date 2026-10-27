@@ -6,9 +6,30 @@ interface HelpDialogProps {
   open: boolean;
   onClose: () => void;
   format: string;
+  mutationType: string;
 }
 
-export const HelpDialog: React.FC<HelpDialogProps> = ({ open, onClose, format }) => {
+// Mesmas saidas que o backend gera para cada tipo (app/processors/dispatch.py)
+const OUTPUTS_BY_TYPE: Record<string, { name: string; desc: string }[]> = {
+  missense: [
+    { name: 'dbpepmutref', desc: 'Relationship between each mutation and its mutated and reference peptides.' },
+    { name: 'dbsaida', desc: 'Mutated peptide sequences in FASTA format.' },
+    { name: 'dbfinal', desc: 'Concatenated database for mass spectrometry search engines (only when there are accepted mutations).' },
+  ],
+  stoploss: [
+    { name: 'dbpepmutref', desc: 'Relationship between each stop-loss variant and its extended peptide.' },
+    { name: 'dbsaida', desc: 'Extended peptide sequences in FASTA format.' },
+  ],
+  frameshift: [
+    { name: 'frameshift', desc: 'Frameshifted peptide sequences in FASTA format.' },
+    { name: 'inframe', desc: 'In-frame peptides produced by the variant, in FASTA format.' },
+    { name: 'ext', desc: 'Extension peptides past the original stop codon, in FASTA format.' },
+  ],
+};
+OUTPUTS_BY_TYPE.indel = OUTPUTS_BY_TYPE.missense;
+
+export const HelpDialog: React.FC<HelpDialogProps> = ({ open, onClose, format, mutationType }) => {
+  const outputs = OUTPUTS_BY_TYPE[mutationType] || OUTPUTS_BY_TYPE.missense;
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -18,14 +39,17 @@ export const HelpDialog: React.FC<HelpDialogProps> = ({ open, onClose, format })
       <DialogContent sx={{ pb: 3 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>How it works</Typography>
         <Typography variant="body2" sx={{ mb: 2, lineHeight: 1.6 }}>
-          The Peptide Processor takes genetic mutation data and applies it to protein sequences. 
-          It generates three main outputs for your research:
+          The Peptide Processor takes genetic mutation data and applies it to the reference sequences.
+          For this mutation type it generates:
         </Typography>
-        <Box component="ul" sx={{ mb: 3 }}>
-          <li><Typography variant="body2"><strong>dbpepmutref:</strong> Detailed relationship between mutations and identified peptides.</Typography></li>
-          <li><Typography variant="body2"><strong>dbsaida:</strong> Mutated protein sequences in standard FASTA format.</Typography></li>
-          <li><Typography variant="body2"><strong>dbfinal:</strong> Concatenated database optimized for mass spectrometry search engines.</Typography></li>
+        <Box component="ul" sx={{ mb: 1 }}>
+          {outputs.map((o) => (
+            <li key={o.name}><Typography variant="body2"><strong>{o.name}:</strong> {o.desc}</Typography></li>
+          ))}
         </Box>
+        <Typography variant="body2" sx={{ mb: 3, lineHeight: 1.6 }}>
+          Lines that cannot be applied to the reference are rejected and listed with the reason in the results summary.
+        </Typography>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Input Format Required (HGVS Standard)</Typography>
         <Box sx={{ bgcolor: 'background.default', p: 2, borderRadius: 1.5, border: 1, borderColor: 'divider', fontFamily: 'monospace', fontSize: '13px', color: 'primary.main', mb: 2 }}>
           {format}

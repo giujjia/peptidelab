@@ -77,7 +77,7 @@ export const About: React.FC = () => {
 
           <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.8 }}>
             <strong>4. ESM-1v Mutation Effect Scoring:</strong><br />
-            Eligible missense variants can be evaluated using the <strong>ESM-1v protein language model</strong>. PeptideLab retrieves the complete wild-type RefSeq protein sequence and evaluates the target substitution within its sequence context.
+            Eligible missense variants can be evaluated using the <strong>ESM-1v protein language model</strong>. PeptideLab evaluates the target substitution within the protein sequence provided in the selected sequence column, checking that the reference amino acid matches the given position.
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.8 }}>
             The model produces a log-likelihood ratio, or LLR, comparing the mutant and reference amino acids at the affected position. This value is used as a sequence-context metric for variant prioritization and functional interpretation and is not intended as a clinical pathogenicity classification.

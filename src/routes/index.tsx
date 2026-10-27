@@ -10,7 +10,6 @@ import { About } from '../pages/About';
 import { VerifyEmail } from '../pages/VerifyEmail';
 import { ResetPassword } from '../pages/ResetPassword';
 import { Layout } from '../components/Layout';
-import { ProtectedRoute } from '../components/common/ProtectedRoute';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -27,9 +26,6 @@ export const AppRoutes: React.FC = () => {
         <Route path="/processor" element={<Processor />} />
         <Route path="/analysis" element={<AnalysisTool />} />
 
-        <Route element={<ProtectedRoute />}>
-          {/* Rotas estritamente autenticadas */}
-        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

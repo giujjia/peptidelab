@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { TextField, Button, Box, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 import { Link, useNavigate } from 'react-router-dom';
 
 const registerSchema = z.object({
@@ -27,13 +28,34 @@ export const Register: React.FC = () => {
   });
 
   const [successMsg, setSuccessMsg] = useState('');
+  // E-mail da conta criada sem entrega da verificacao, para permitir o reenvio
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [resending, setResending] = useState(false);
+
+  const handleResend = async () => {
+    setResending(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/resend-verification', { email: pendingEmail });
+      setSuccessMsg(res.data?.message || 'Se houver uma conta pendente de verificação, enviaremos uma nova mensagem.');
+      setPendingEmail('');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Não foi possível reenviar agora. Tente novamente em alguns minutos.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const onSubmit = async (data: RegisterFormInputs) => {
     setError('');
     setSuccessMsg('');
+    setPendingEmail('');
     try {
       const res = await registerAccount(data.email, data.password);
-      if (res && res.is_verified === false) {
+      if (res && res.is_verified === false && res.verification_email_sent === false) {
+        setPendingEmail(data.email);
+        setSuccessMsg('Conta criada, mas não conseguimos enviar o e-mail de verificação agora. Use o botão abaixo para reenviar em alguns minutos.');
+      } else if (res && res.is_verified === false) {
         setSuccessMsg('Conta criada com sucesso! Um e-mail de verificação foi enviado para o seu endereço. Por favor, confirme seu e-mail para acessar.');
       } else {
         navigate('/');
@@ -66,7 +88,19 @@ export const Register: React.FC = () => {
         </Box>
 
         <Box component="form" onSubmit={handleSubmit(onSubmit)}>
-          {successMsg && <Alert severity="info" sx={{ mb: 2 }}>{successMsg}</Alert>}
+          {successMsg && (
+            <Alert
+              severity={pendingEmail ? 'warning' : 'info'}
+              sx={{ mb: 2 }}
+              action={pendingEmail ? (
+                <Button color="inherit" size="small" onClick={handleResend} disabled={resending}>
+                  Reenviar
+                </Button>
+              ) : undefined}
+            >
+              {successMsg}
+            </Alert>
+          )}
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <TextField
             fullWidth

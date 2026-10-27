@@ -187,13 +187,27 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     }
   };
 
-  const handleBack = async () => {
-    try { await api.delete(`/analysis/session/${sessionId}`); } catch {}
+  // Sai do workspace atual sem apagar a sessao no servidor; ela segue a retencao e pode ser reaberta
+  const resetWorkspace = () => {
     setSessionId('');
     setSearchQuery('');
     setSheetsInfo({});
     setSheetData(null);
     setActiveSheet('');
+  };
+
+  // Exclusao so por acao explicita do usuario; devolve false quando o servidor recusa
+  const handleDeleteSession = async () => {
+    try {
+      await api.delete(`/analysis/session/${sessionId}`);
+    } catch (err: any) {
+      if (err.response?.status !== 404) {
+        notify(err.response?.data?.detail || 'Failed to delete session', 'error');
+        return false;
+      }
+    }
+    resetWorkspace();
+    return true;
   };
 
   const handleNumericFilter = async (target_column: string, operator: string, threshold: number) => {
@@ -224,7 +238,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
 
   return {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading, searchQuery, setSearchQuery,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, handleBack,
+    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
     handleNumericFilter, processResponse
   };
 }

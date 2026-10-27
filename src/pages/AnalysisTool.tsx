@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, LinearProgress, Typography } from '@mui/material';
+import { Box, LinearProgress, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { api } from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -53,7 +53,7 @@ export const AnalysisTool: React.FC = () => {
 
   const {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, handleBack,
+    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
     searchQuery, setSearchQuery
   } = useSheetData(notify, fetchJobs);
 
@@ -469,11 +469,33 @@ export const AnalysisTool: React.FC = () => {
     }
   };
 
-  const handleNewAnalysis = async () => {
-    await handleBack();
+  const clearWorkspaceState = () => {
     setSearchQuery('');
     setConnectedJobId('');
     setConnectedJobInfo(null);
+  };
+
+  // Novo workspace; a sessao anterior continua no servidor e reabrivel pelo historico durante a retencao
+  const handleNewAnalysis = () => {
+    resetWorkspace();
+    clearWorkspaceState();
+    notify('Previous session kept. Sessions with background tasks can be reopened from Background Tasks while they are retained.', 'info');
+  };
+
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState(false);
+  const [deletingSession, setDeletingSession] = useState(false);
+
+  const handleConfirmDeleteSession = async () => {
+    setDeletingSession(true);
+    try {
+      if (await handleDeleteSession()) {
+        clearWorkspaceState();
+        setConfirmDeleteSession(false);
+        notify('Session deleted', 'success');
+      }
+    } finally {
+      setDeletingSession(false);
+    }
   };
 
   if (!sessionId) {
@@ -544,6 +566,7 @@ export const AnalysisTool: React.FC = () => {
           onHideAllColumns={() => handleHideAll(allColumns)}
           onDownload={handleDownload}
           onNewAnalysis={handleNewAnalysis}
+          onDeleteSession={() => setConfirmDeleteSession(true)}
           onOpenJobsDrawer={() => setJobsDrawerOpen(true)}
           onImportFiles={handleImportFiles}
         />
@@ -638,6 +661,22 @@ export const AnalysisTool: React.FC = () => {
         activeSheet={activeSheet}
         sheetsInfo={sheetsInfo}
       />
+
+      <Dialog open={confirmDeleteSession} onClose={() => !deletingSession && setConfirmDeleteSession(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Delete this session?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            All sheets and results of this session are removed from the server now and cannot be reopened from Background Tasks.
+            To start another analysis and keep this one, use New Analysis instead.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmDeleteSession(false)} color="inherit" disabled={deletingSession} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={handleConfirmDeleteSession} color="error" variant="contained" disabled={deletingSession} sx={{ textTransform: 'none' }}>
+            {deletingSession ? 'Deleting...' : 'Delete Session'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <RemovalConfirmDialog
         open={!!pendingRemoval}

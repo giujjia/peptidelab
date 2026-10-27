@@ -6,6 +6,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 interface HeaderBarProps {
   sheetName: string;
@@ -19,6 +20,7 @@ interface HeaderBarProps {
   onHideAllColumns: () => void;
   onDownload: () => void;
   onNewAnalysis: () => void;
+  onDeleteSession?: () => void;
   onOpenJobsDrawer?: () => void;
   onImportFiles?: (files: File[]) => void;
 }
@@ -43,7 +45,7 @@ const headerOutlinedButtonSx = {
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   sheetName, totalRows, searchQuery, setSearchQuery,
   filteredColumns, hiddenColumns, onToggleColumn, onShowAllColumns, onHideAllColumns,
-  onDownload, onNewAnalysis, onOpenJobsDrawer, onImportFiles
+  onDownload, onNewAnalysis, onDeleteSession, onOpenJobsDrawer, onImportFiles
 }) => {
   const [colAnchor, setColAnchor] = useState<null | HTMLElement>(null);
   const [columnSearch, setColumnSearch] = useState('');
@@ -217,6 +219,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         >
           New Analysis
         </Button>
+
+        {onDeleteSession && (
+          <Button
+            variant="outlined"
+            color="error"
+            size="small"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={onDeleteSession}
+            sx={headerOutlinedButtonSx}
+          >
+            Delete Session
+          </Button>
+        )}
       </Box>
     </Box>
   );

@@ -102,9 +102,34 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       applyIdentity(null, null);
     };
 
+    // Login ou logout feito em outra aba chega pelo evento storage, sem esperar a proxima chamada a API
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== TOKEN_KEY && event.key !== USER_KEY) return;
+      let token: string | null = null;
+      let saved: unknown = null;
+      try {
+        token = localStorage.getItem(TOKEN_KEY);
+        const raw = localStorage.getItem(USER_KEY);
+        saved = raw ? JSON.parse(raw) : null;
+      } catch {
+        token = null;
+      }
+      if (!token || !isValidUser(saved)) {
+        setAuthToken(null);
+        setSession(null);
+        setUser(null);
+      } else if (token !== getAuthToken()) {
+        setAuthToken(token);
+        setSession({ access_token: token });
+        setUser(saved);
+      }
+    };
+
     window.addEventListener('auth:unauthorized', handleUnauthorized);
+    window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      window.removeEventListener('storage', handleStorage);
     };
   }, [applyIdentity]);
 

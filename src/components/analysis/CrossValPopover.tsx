@@ -16,6 +16,7 @@ interface CrossValPopoverProps {
     score_col_b: string;
     margin_percentage: number;
     higher_is_better: boolean;
+    classification_threshold: number;
   }) => void;
   sheets: string[];
   activeSheet: string;
@@ -32,7 +33,9 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
   const [scoreColB, setScoreColB] = useState('');
   const [margin, setMargin] = useState<number>(20);
   const [higherIsBetter, setHigherIsBetter] = useState<boolean>(true);
-  
+  // Limiar absoluto do score alvo (tau), na escala da coluna de score escolhida
+  const [threshold, setThreshold] = useState<string>('0.95');
+
   const [colunasEmComum, setColunasEmComum] = useState<string[]>([]);
 
   // Pre-seleciona a aba ativa como dataset B (Target) ao abrir
@@ -45,6 +48,7 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
       setScoreColB('');
       setMargin(20);
       setHigherIsBetter(true);
+      setThreshold('0.95');
     }
   }, [anchorEl, activeSheet]);
 
@@ -68,7 +72,8 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
   }, [sheetA, sheetB, sheetsInfo]);
 
   const aberto = Boolean(anchorEl);
-  const pronto = sheetA !== '' && sheetB !== '' && joinKeys.length > 0 && scoreColA !== '' && scoreColB !== '' && sheetA !== sheetB;
+  const thresholdValido = threshold.trim() !== '' && Number.isFinite(Number(threshold));
+  const pronto = sheetA !== '' && sheetB !== '' && joinKeys.length > 0 && scoreColA !== '' && scoreColB !== '' && sheetA !== sheetB && thresholdValido;
 
   return (
     <Popover
@@ -190,6 +195,17 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
           />
         </Box>
 
+        <TextField
+          label="Score threshold (tau)"
+          type="number"
+          size="small"
+          value={threshold}
+          onChange={e => setThreshold(e.target.value)}
+          error={!thresholdValido}
+          helperText="Target score must be above (or below) this value, in the score column's own scale"
+          inputProps={{ step: 0.01 }}
+        />
+
         <Button
           variant="contained"
           onClick={() => onConfirm({ 
@@ -199,7 +215,8 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
             score_col_a: scoreColA,
             score_col_b: scoreColB,
             margin_percentage: margin,
-            higher_is_better: higherIsBetter
+            higher_is_better: higherIsBetter,
+            classification_threshold: Number(threshold)
           })}
           disabled={!pronto}
           fullWidth

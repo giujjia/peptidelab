@@ -390,6 +390,7 @@ export const AnalysisTool: React.FC = () => {
     score_col_b: string;
     margin_percentage: number;
     higher_is_better: boolean;
+    classification_threshold: number;
   }) => {
     setCrossValAnchorEl(null);
     try {

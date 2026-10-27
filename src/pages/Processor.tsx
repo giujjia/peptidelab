@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Box, Typography, Container, Paper, CircularProgress, Button } from '@mui/material';
 import Grid from '@mui/material/Unstable_Grid2';
 import { useNavigate } from 'react-router-dom';
@@ -42,6 +42,22 @@ export const Processor: React.FC = () => {
   const [viewJobData, setViewJobData] = useState<{ relation: string, fasta: string, dbf: string } | null>(null);
   const [viewJobLoading, setViewJobLoading] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+  // Geracao da visualizacao; respostas de pedidos anteriores ou de outra identidade sao descartadas
+  const viewRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      viewRequestRef.current += 1;
+      setViewJobData(null);
+      setViewJobLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const handleCloseResults = () => {
+    viewRequestRef.current += 1;
+    setViewJobData(null);
+    setViewJobLoading(false);
+  };
 
   const { jobs, fetchJobs } = useJobPolling(isAuthenticated);
   const current = mutationTypes.find((m) => m.id === mutationType)!;
@@ -145,6 +161,7 @@ export const Processor: React.FC = () => {
   };
 
   const handleViewJob = async (jobId: string) => {
+    const request = ++viewRequestRef.current;
     setViewJobLoading(true);
     setViewJobData(null);
     
@@ -158,12 +175,14 @@ export const Processor: React.FC = () => {
         api.get(`/jobs/${jobId}/outputs/fasta`, { responseType: 'text' }).catch(() => ({ data: '' })),
         api.get(`/jobs/${jobId}/outputs/dbf`, { responseType: 'text' }).catch(() => ({ data: '' }))
       ]);
+      if (request !== viewRequestRef.current) return;
       setViewJobData({ relation: relRes.data, fasta: fastaRes.data, dbf: dbfRes.data });
     } catch (err) {
       console.error(err);
+      if (request !== viewRequestRef.current) return;
       setViewJobData({ relation: 'Error loading results', fasta: '', dbf: '' });
     } finally {
-      setViewJobLoading(false);
+      if (request === viewRequestRef.current) setViewJobLoading(false);
     }
   };
 
@@ -241,7 +260,7 @@ export const Processor: React.FC = () => {
           ref={resultsRef}
           loading={viewJobLoading}
           data={viewJobData}
-          onClose={() => setViewJobData(null)}
+          onClose={handleCloseResults}
         />
 
         <HelpDialog 

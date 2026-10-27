@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -27,6 +27,34 @@ export const Login: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [forgotMsg, setForgotMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [forgotLoading, setForgotLoading] = useState(false);
+  // Cada abertura do dialogo e um fluxo; callbacks de fluxos anteriores sao ignorados
+  const forgotFlowRef = useRef(0);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearCloseTimer, []);
+
+  const openForgot = () => {
+    clearCloseTimer();
+    forgotFlowRef.current += 1;
+    setForgotOpen(true);
+    setResetStep(1);
+    setForgotMsg(null);
+    setForgotLoading(false);
+  };
+
+  const closeForgot = () => {
+    clearCloseTimer();
+    forgotFlowRef.current += 1;
+    setForgotOpen(false);
+    setForgotLoading(false);
+  };
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginFormInputs>({
     resolver: zodResolver(loginSchema),
@@ -43,28 +71,36 @@ export const Login: React.FC = () => {
 
   const handleRequestReset = async () => {
     if (!forgotEmail) return;
+    const flow = forgotFlowRef.current;
     setForgotLoading(true);
     setForgotMsg(null);
     try {
       await api.post('/auth/forgot-password', { email: forgotEmail });
+      if (flow !== forgotFlowRef.current) return;
       setResetStep(2);
       setForgotMsg({ text: 'Reset code sent to your email. Enter your new password below.', type: 'success' });
     } catch (err: any) {
+      if (flow !== forgotFlowRef.current) return;
       setForgotMsg({ text: err.response?.data?.detail || 'Failed to request password reset', type: 'error' });
     } finally {
-      setForgotLoading(false);
+      if (flow === forgotFlowRef.current) setForgotLoading(false);
     }
   };
 
   const handleConfirmReset = async () => {
     if (!resetToken || !newPassword) return;
+    const flow = forgotFlowRef.current;
     setForgotLoading(true);
     setForgotMsg(null);
     try {
       await api.post('/auth/reset-password', { token: resetToken, new_password: newPassword });
+      if (flow !== forgotFlowRef.current) return;
       setForgotMsg({ text: 'Password reset successfully! You can now log in.', type: 'success' });
-      setTimeout(() => {
-        setForgotOpen(false);
+      clearCloseTimer();
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
+        if (flow !== forgotFlowRef.current) return;
+        closeForgot();
         setResetStep(1);
         setForgotEmail('');
         setResetToken('');
@@ -72,9 +108,10 @@ export const Login: React.FC = () => {
         setForgotMsg(null);
       }, 1500);
     } catch (err: any) {
+      if (flow !== forgotFlowRef.current) return;
       setForgotMsg({ text: err.response?.data?.detail || 'Failed to reset password', type: 'error' });
     } finally {
-      setForgotLoading(false);
+      if (flow === forgotFlowRef.current) setForgotLoading(false);
     }
   };
 
@@ -126,7 +163,7 @@ export const Login: React.FC = () => {
             <Button
               variant="text"
               size="small"
-              onClick={() => { setForgotOpen(true); setResetStep(1); setForgotMsg(null); }}
+              onClick={openForgot}
               sx={{ textTransform: 'none', fontSize: '12px', p: 0 }}
             >
               Forgot password?
@@ -160,7 +197,7 @@ export const Login: React.FC = () => {
       </Paper>
 
       {/* Forgot Password Dialog */}
-      <Dialog open={forgotOpen} onClose={() => setForgotOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={forgotOpen} onClose={closeForgot} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Reset Password</DialogTitle>
         <DialogContent>
           {forgotMsg && <Alert severity={forgotMsg.type} sx={{ mb: 2 }}>{forgotMsg.text}</Alert>}
@@ -197,7 +234,7 @@ export const Login: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setForgotOpen(false)} color="inherit" sx={{ textTransform: 'none' }}>
+          <Button onClick={closeForgot} color="inherit" sx={{ textTransform: 'none' }}>
             Cancel
           </Button>
           {resetStep === 1 ? (

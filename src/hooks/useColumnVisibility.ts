@@ -1,53 +1,51 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '../services/api';
+import { SheetData } from '../types';
 
-export function useColumnVisibility(sessionId: string, activeSheet: string, setSheetData: (data: any) => void, notify: (msg: string, type?: 'success' | 'error' | 'info') => void) {
-  const [hiddenColumns, setHiddenColumns] = useState<Record<string, string[]>>({});
+export function useColumnVisibility(
+  sessionId: string,
+  activeSheet: string,
+  sheetData: SheetData | null,
+  setSheetData: (data: any) => void,
+  notify: (msg: string, type?: 'success' | 'error' | 'info') => void
+) {
+  // Ocultas vem sempre da ultima resposta do servidor para a aba atual, sem estado local paralelo
+  const hidden = sheetData ? sheetData.all_columns.filter(c => !sheetData.columns.includes(c)) : [];
+  const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
+  const contextRef = useRef({ sessionId, activeSheet });
+  contextRef.current = { sessionId, activeSheet };
 
-  const handleToggleColumn = async (col: string) => {
-    const current = hiddenColumns[activeSheet] || [];
-    const updated = current.includes(col)
-      ? current.filter(c => c !== col)
-      : [...current, col];
-    setHiddenColumns(prev => ({ ...prev, [activeSheet]: updated }));
+  const send = async (updated: string[], errorMsg: string) => {
+    // Uma alteracao por vez, calculada sobre o estado confirmado
+    if (pendingRef.current || !sessionId || !activeSheet) return;
+    pendingRef.current = true;
+    setPending(true);
+    const origin = { sessionId, activeSheet };
+    const sameContext = () =>
+      contextRef.current.sessionId === origin.sessionId && contextRef.current.activeSheet === origin.activeSheet;
     try {
       const res = await api.post('/analysis/toggle-columns', {
-        session_id: sessionId,
-        sheet_name: activeSheet,
+        session_id: origin.sessionId,
+        sheet_name: origin.activeSheet,
         hidden_columns: updated,
       });
-      setSheetData(res.data.data);
+      if (sameContext()) setSheetData(res.data.data);
     } catch (err: any) {
       console.error(err);
-      notify(err.response?.data?.detail || 'Failed to toggle column', 'error');
+      if (sameContext()) notify(err.response?.data?.detail || errorMsg, 'error');
+    } finally {
+      pendingRef.current = false;
+      setPending(false);
     }
   };
 
-  const handleShowAll = async () => {
-    setHiddenColumns(prev => ({ ...prev, [activeSheet]: [] }));
-    try {
-      const res = await api.post('/analysis/toggle-columns', {
-        session_id: sessionId, sheet_name: activeSheet, hidden_columns: [],
-      });
-      setSheetData(res.data.data);
-    } catch (err: any) {
-      console.error(err);
-      notify(err.response?.data?.detail || 'Failed to show all columns', 'error');
-    }
-  };
+  const handleToggleColumn = (col: string) =>
+    send(hidden.includes(col) ? hidden.filter(c => c !== col) : [...hidden, col], 'Failed to toggle column');
 
-  const handleHideAll = async (allColumns: string[]) => {
-    setHiddenColumns(prev => ({ ...prev, [activeSheet]: allColumns }));
-    try {
-      const res = await api.post('/analysis/toggle-columns', {
-        session_id: sessionId, sheet_name: activeSheet, hidden_columns: allColumns,
-      });
-      setSheetData(res.data.data);
-    } catch (err: any) {
-      console.error(err);
-      notify(err.response?.data?.detail || 'Failed to hide all columns', 'error');
-    }
-  };
+  const handleShowAll = () => send([], 'Failed to show all columns');
 
-  return { hiddenColumns, handleToggleColumn, handleShowAll, handleHideAll };
+  const handleHideAll = (allColumns: string[]) => send(allColumns, 'Failed to hide all columns');
+
+  return { hiddenColumns: { [activeSheet]: hidden } as Record<string, string[]>, pending, handleToggleColumn, handleShowAll, handleHideAll };
 }

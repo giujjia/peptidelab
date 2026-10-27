@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   AppBar,
   Toolbar,
@@ -29,6 +30,8 @@ export const Layout: React.FC = () => {
   const { isAuthenticated, user, logout, deleteAccount } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { notify } = useNotification();
 
   const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -40,7 +43,10 @@ export const Layout: React.FC = () => {
 
   const handleLogout = async () => {
     handleCloseMenu();
-    await logout();
+    const { revoked } = await logout();
+    if (!revoked) {
+      notify('Signed out on this device, but the server could not confirm the session was revoked. It stays valid until it expires.', 'warning');
+    }
     navigate('/login');
   };
 
@@ -188,7 +194,7 @@ export const Layout: React.FC = () => {
       </AppBar>
 
       {/* Confirmation Modal for Account Deletion */}
-      <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={confirmDeleteOpen} onClose={() => !deleting && setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>Confirmar Exclusão de Conta</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -196,20 +202,30 @@ export const Layout: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setConfirmDeleteOpen(false)} color="inherit" sx={{ textTransform: 'none' }}>
+          <Button onClick={() => setConfirmDeleteOpen(false)} color="inherit" disabled={deleting} sx={{ textTransform: 'none' }}>
             Cancelar
           </Button>
           <Button
             onClick={async () => {
-              setConfirmDeleteOpen(false);
-              await deleteAccount();
-              navigate('/login');
+              setDeleting(true);
+              try {
+                await deleteAccount();
+                setConfirmDeleteOpen(false);
+                notify('Conta desativada.', 'success');
+                navigate('/login');
+              } catch (err: any) {
+                // Dialogo continua aberto: a conta segue ativa
+                notify(err?.response?.data?.detail || 'Não foi possível confirmar a desativação. Sua conta continua ativa.', 'error');
+              } finally {
+                setDeleting(false);
+              }
             }}
             color="error"
             variant="contained"
+            disabled={deleting}
             sx={{ textTransform: 'none' }}
           >
-            Sim, Excluir Minha Conta
+            {deleting ? 'Excluindo...' : 'Sim, Excluir Minha Conta'}
           </Button>
         </DialogActions>
       </Dialog>

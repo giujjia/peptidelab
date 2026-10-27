@@ -175,6 +175,13 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       setSheetData(res.data.data);
       notify(res.data.message, 'success');
     } catch (err: any) {
+      if (err.response?.status === 409) {
+        // Aba mudou em outra operacao; recarrega para o usuario repetir sobre a versao atual
+        notify('This sheet was changed by another operation. It has been reloaded, please apply the filter again.', 'info');
+        setLoadingSheet(false);
+        await fetchSheetData(activeSheet, 1);
+        return;
+      }
       notify(err.response?.data?.detail || 'Failed to apply filter', 'error');
     } finally {
       setLoadingSheet(false);

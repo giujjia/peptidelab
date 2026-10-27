@@ -21,6 +21,7 @@ import { SheetTabs } from '../components/analysis/SheetTabs';
 import { DataTable } from '../components/analysis/DataTable';
 import { PaginationControl } from '../components/analysis/PaginationControl';
 import { TaskProgressWidget, TaskInfo } from '../components/common/TaskProgressWidget';
+import { useTaskPolling, TrackedTask, TaskOutcome } from '../hooks/useTaskPolling';
 
 const FILTER_CONFIG = {
   'add-genes': { title: 'Add Gene Information', description: 'Automatically fetches and maps gene symbols from the NCBI Entrez database based on your protein identifiers (e.g. GI or Locus).' },
@@ -56,7 +57,7 @@ export const AnalysisTool: React.FC = () => {
 
   const {
     hiddenColumns, handleToggleColumn, handleShowAll, handleHideAll
-  } = useColumnVisibility(sessionId, activeSheet, setSheetData, notify);
+  } = useColumnVisibility(sessionId, activeSheet, sheetData, setSheetData, notify);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -76,10 +77,11 @@ export const AnalysisTool: React.FC = () => {
 
   // ID Mapping & Compare State
   const [idMappingAnchorEl, setIdMappingAnchorEl] = useState<null | HTMLElement>(null);
-  const [idMappingRunning, setIdMappingRunning] = useState(false);
+  const [idMappingTask, setIdMappingTask] = useState<TrackedTask | null>(null);
+  const [idMappingStarting, setIdMappingStarting] = useState(false);
   const [compareAnchorEl, setCompareAnchorEl] = useState<null | HTMLElement>(null);
   const [crossValAnchorEl, setCrossValAnchorEl] = useState<null | HTMLElement>(null);
-  const [compareTaskId, setCompareTaskId] = useState<string | null>(null);
+  const [compareTask, setCompareTask] = useState<TrackedTask | null>(null);
 
   // Polling para ESM-1v
   const isEsmPollingRef = useRef(false);
@@ -145,56 +147,60 @@ export const AnalysisTool: React.FC = () => {
     };
   }, [esmTaskId, esmTaskStatus, esmTaskSheet, esmTaskSession, sessionId, activeSheet, sheetData?.page, fetchSheetData, notify]);
 
-  // Polling para Compare & Cross-Validation
-  const isComparePollingRef = useRef(false);
-  useEffect(() => {
-    if (!compareTaskId) return;
+  // Indicador de ID Mapping vale so para a sessao que iniciou a tarefa
+  const idMappingRunning = idMappingStarting || (!!idMappingTask && idMappingTask.sessionId === sessionId);
 
-    let failCount = 0;
-    let isCancelled = false;
+  // Resultado de tarefa so altera a tela se ela ainda mostra a sessao de origem
+  const notifyOtherSession = (label: string, outcome: TaskOutcome) => {
+    if (outcome === 'done') notify(`${label} finished in another session. Open it from Background Tasks.`, 'info');
+  };
 
-    const pollCompare = async () => {
-      if (isComparePollingRef.current || isCancelled) return;
-      isComparePollingRef.current = true;
-
-      try {
-        const { data } = await api.get(`/analysis/compare-status/${compareTaskId}`);
-        if (isCancelled) return;
-        failCount = 0;
-        if (data.status === 'done') {
-          setCompareTaskId(null);
-          notify(`Comparison complete! New tab: "${data.nova_aba}"`, 'success');
-          
-          if (data.nova_aba) {
-            setSheetsInfo((prev: any) => ({
-              ...prev,
-              [data.nova_aba]: { row_count: 0, columns: [] }
-            }));
-            fetchSheetData(data.nova_aba, 1);
-          }
-        } else if (data.status === 'error') {
-          setCompareTaskId(null);
-          notify(`Compare Error: ${data.error}`, 'error');
-        }
-      } catch {
-        if (isCancelled) return;
-        failCount++;
-        if (failCount >= 5) {
-          setCompareTaskId(null);
-          notify('Comparison polling stopped due to network errors', 'error');
-        }
-      } finally {
-        isComparePollingRef.current = false;
+  useTaskPolling(idMappingTask, (task, outcome, data) => {
+    setIdMappingTask(prev => (prev?.taskId === task.taskId ? null : prev));
+    if (task.sessionId !== sessionId) {
+      notifyOtherSession('UniProt ID Mapping', outcome);
+      return;
+    }
+    if (outcome === 'done') {
+      notify('UniProt ID Mapping complete!', 'success');
+      if (task.sheetName === activeSheet) {
+        fetchSheetData(activeSheet, sheetData?.page || 1);
+      } else if (task.sheetName) {
+        notify(`Results ready on sheet "${task.sheetName}"`, 'info');
       }
-    };
+    } else if (outcome === 'error') {
+      const errDetail = typeof data?.error === 'string' ? data.error : 'ID Mapping processing error';
+      notify(`ID Mapping Error: ${errDetail}`, 'error');
+    } else if (outcome === 'cancelled') {
+      notify('ID Mapping cancelled', 'info');
+    } else {
+      notify('ID Mapping polling stopped due to network errors', 'error');
+    }
+  });
 
-    const interval = setInterval(pollCompare, 2000);
-    return () => {
-      isCancelled = true;
-      clearInterval(interval);
-      isComparePollingRef.current = false;
-    };
-  }, [compareTaskId, setSheetsInfo, notify, fetchSheetData]);
+  useTaskPolling(compareTask, (task, outcome, data) => {
+    setCompareTask(prev => (prev?.taskId === task.taskId ? null : prev));
+    if (task.sessionId !== sessionId) {
+      notifyOtherSession('Comparison', outcome);
+      return;
+    }
+    if (outcome === 'done') {
+      notify(`Comparison complete! New tab: "${data.nova_aba}"`, 'success');
+      if (data.nova_aba) {
+        setSheetsInfo((prev: any) => ({
+          ...prev,
+          [data.nova_aba]: { row_count: 0, columns: [] }
+        }));
+        fetchSheetData(data.nova_aba, 1);
+      }
+    } else if (outcome === 'error') {
+      notify(`Compare Error: ${data?.error}`, 'error');
+    } else if (outcome === 'cancelled') {
+      notify('Comparison cancelled', 'info');
+    } else {
+      notify('Comparison polling stopped due to network errors', 'error');
+    }
+  });
 
   const handleConnectJob = async (jobId: string) => {
     if (!jobId || !sessionId) return;
@@ -298,7 +304,13 @@ export const AnalysisTool: React.FC = () => {
         notify(res.data.message, 'success');
       }
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to apply filter', 'error');
+      if (err.response?.status === 409) {
+        // Aba mudou em outra operacao; recarrega para o usuario repetir sobre a versao atual
+        notify('This sheet was changed by another operation. It has been reloaded, please apply the action again.', 'warning');
+        fetchSheetData(activeSheet, sheetData?.page || 1);
+      } else {
+        notify(err.response?.data?.detail || 'Failed to apply filter', 'error');
+      }
     } finally {
       setFilterLoading(false);
     }
@@ -349,57 +361,35 @@ export const AnalysisTool: React.FC = () => {
 
   const handleIdMappingConfirm = async (col_origin: string) => {
     setIdMappingAnchorEl(null);
-    setIdMappingRunning(true);
+    setIdMappingStarting(true);
+    const origin = { sessionId, sheetName: activeSheet };
     try {
       const res = await api.post('/analysis/run-id-mapping', {
-        session_id: sessionId,
-        sheet_name: activeSheet,
+        session_id: origin.sessionId,
+        sheet_name: origin.sheetName,
         col_origin,
       });
       const taskId = res.data.task_id;
+      setIdMappingTask({ taskId, ...origin, statusUrl: `/analysis/id-mapping-status/${taskId}` });
       notify('UniProt ID Mapping running in background...', 'info');
-
-      let failCount = 0;
-      const poll = setInterval(async () => {
-        try {
-          const { data: status } = await api.get(`/analysis/id-mapping-status/${taskId}`);
-          failCount = 0;
-          if (status.status === 'done') {
-            clearInterval(poll);
-            setIdMappingRunning(false);
-            notify('UniProt ID Mapping complete!', 'success');
-            fetchSheetData(activeSheet, sheetData?.page || 1);
-          } else if (status.status === 'error') {
-            clearInterval(poll);
-            setIdMappingRunning(false);
-            const errDetail = typeof status.error === 'string' ? status.error : 'ID Mapping processing error';
-            notify(`ID Mapping Error: ${errDetail}`, 'error');
-          }
-        } catch {
-          failCount++;
-          if (failCount >= 5) {
-            clearInterval(poll);
-            setIdMappingRunning(false);
-            notify('ID Mapping polling stopped due to network errors', 'error');
-          }
-        }
-      }, 2000);
     } catch (err: any) {
-      setIdMappingRunning(false);
       const detail = err.response?.data?.detail;
       const msg = typeof detail === 'string' ? detail : 'Failed to start ID Mapping';
       notify(msg, 'error');
+    } finally {
+      setIdMappingStarting(false);
     }
   };
 
   const handleCompareConfirm = async (params: { sheet_a: string; sheet_b: string; col_key: string }) => {
     setCompareAnchorEl(null);
     try {
+      const origin = sessionId;
       const res = await api.post('/analysis/run-compare', {
-        session_id: sessionId,
+        session_id: origin,
         ...params,
       });
-      setCompareTaskId(res.data.task_id);
+      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${res.data.task_id}` });
       notify('Comparing datasets in background...', 'info');
     } catch (err: any) {
       notify(err.response?.data?.detail || 'Failed to start comparison', 'error');
@@ -418,11 +408,12 @@ export const AnalysisTool: React.FC = () => {
   }) => {
     setCrossValAnchorEl(null);
     try {
+      const origin = sessionId;
       const res = await api.post('/analysis/run-crossval', {
-        session_id: sessionId,
+        session_id: origin,
         ...params,
       });
-      setCompareTaskId(res.data.task_id);
+      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${res.data.task_id}` });
       notify('Cross-validation started in background...', 'info');
     } catch (err: any) {
       notify(err.response?.data?.detail || 'Failed to start cross-validation', 'error');

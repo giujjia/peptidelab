@@ -5,6 +5,18 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { api } from '../services/api';
 
+// Um pedido por token, compartilhado entre montagens; o token e de uso unico no servidor
+const verifications = new Map<string, Promise<void>>();
+
+export const verifyEmailToken = (token: string) => {
+  let pending = verifications.get(token);
+  if (!pending) {
+    pending = api.post('/auth/verify-email', { token }).then(() => undefined);
+    verifications.set(token, pending);
+  }
+  return pending;
+};
+
 export const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -14,24 +26,32 @@ export const VerifyEmail: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    // Cada token comeca do zero e ignora respostas de tokens anteriores
+    let current = true;
+    setLoading(true);
+    setSuccess(false);
+    setErrorMsg('');
+
     if (!token) {
       setLoading(false);
       setErrorMsg('No verification token provided.');
       return;
     }
 
-    const verify = async () => {
-      try {
-        await api.post('/auth/verify-email', { token });
-        setSuccess(true);
-      } catch (err: any) {
-        setErrorMsg(err.response?.data?.detail || err.message || 'Failed to verify email token.');
-      } finally {
-        setLoading(false);
-      }
-    };
+    verifyEmailToken(token)
+      .then(() => {
+        if (current) setSuccess(true);
+      })
+      .catch((err: any) => {
+        if (current) setErrorMsg(err.response?.data?.detail || err.message || 'Failed to verify email token.');
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
 
-    verify();
+    return () => {
+      current = false;
+    };
   }, [token]);
 
   return (

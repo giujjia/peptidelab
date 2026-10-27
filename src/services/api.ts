@@ -6,6 +6,8 @@ export const setAuthToken = (token: string | null) => {
   currentToken = token;
 };
 
+export const getAuthToken = () => currentToken;
+
 interface ApiConfig extends Omit<RequestInit, 'headers'> {
   responseType?: 'json' | 'text' | 'blob';
   headers?: Record<string, string>;
@@ -39,8 +41,10 @@ async function request(method: string, endpoint: string, data?: any, config: Api
     headers.set('Content-Type', 'application/json');
   }
 
-  if (currentToken) {
-    headers.set('Authorization', `Bearer ${currentToken}`);
+  // Token usado nesta chamada; o 401 so invalida a sessao se ela ainda for a mesma
+  const requestToken = currentToken;
+  if (requestToken) {
+    headers.set('Authorization', `Bearer ${requestToken}`);
   }
 
   const { responseType, headers: _ignore, params: _ignoreParams, ...fetchConfig } = config;
@@ -66,7 +70,7 @@ async function request(method: string, endpoint: string, data?: any, config: Api
     }
 
     if (response.status === 401 && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { token: requestToken } }));
     }
     
     // Simulate axios error structure with detailed message

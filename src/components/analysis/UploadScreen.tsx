@@ -59,10 +59,10 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
 
               <Box sx={{ mb: 3 }}>
                 <FileDropzone
-                  accept=".xlsx,.xls,.csv"
+                  accept=".xlsx,.csv"
                   onFileSelect={setSelectedFiles}
                   selectedFiles={selectedFiles}
-                  hint="Supported: .xlsx, .xls, .csv — Drop 1 or more files to analyze/compare"
+                  hint="Supported: .xlsx, .csv — Drop 1 or more files to analyze/compare"
                 />
               </Box>
 

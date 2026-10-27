@@ -8,6 +8,8 @@ export interface Job {
   output_fasta_path: string | null;
   output_dbf_path: string | null;
   output_dbpepmutref_path: string | null;
+  output_inframe_path?: string | null;
+  output_ext_path?: string | null;
   error_message: string | null;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   size_bytes?: number;
@@ -31,6 +33,7 @@ export interface SheetInfo {
 }
 
 export interface SheetData {
+  sheet_name?: string;
   columns: string[];
   all_columns: string[];
   data: Record<string, any>[];

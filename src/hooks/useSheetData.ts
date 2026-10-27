@@ -1,7 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { downloadBlob } from '../utils/download';
 import { SheetInfo, SheetData } from '../types';
+
+// Formato unico de sessao aberta (upload, Job carregado ou reabertura)
+export interface SessionResponse {
+  session_id: string;
+  sheets: Record<string, SheetInfo>;
+  connected_job_id?: string | null;
+  connected_job_info?: { mutation_type: string; dbpepmutref_rows: number } | null;
+}
 
 export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 'info') => void, fetchJobs: () => void) {
   const [sessionId, setSessionId] = useState('');
@@ -10,8 +18,30 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
   const [sheetData, setSheetData] = useState<SheetData | null>(null);
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Busca vale para a aba inteira no servidor, nao so para a pagina carregada
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef('');
+  searchRef.current = searchQuery;
+
+  // Catalogo de abas acompanha colunas e total confirmados pelo servidor apos cada operacao
+  useEffect(() => {
+    const name = sheetData?.sheet_name;
+    if (!name) return;
+    setSheetsInfo(prev => {
+      const searching = searchRef.current.trim() !== '';
+      const rowCount = searching ? prev[name]?.row_count ?? sheetData.total_rows : sheetData.total_rows;
+      return { ...prev, [name]: { ...prev[name], columns: sheetData.all_columns, row_count: rowCount } };
+    });
+  }, [sheetData]);
+
+  const searchParams = () => {
+    const q = searchRef.current.trim();
+    return q ? { search: q } : {};
+  };
 
   const processResponse = useCallback(async (data: any) => {
+    setSearchQuery('');
+    searchRef.current = '';
     setSessionId(data.session_id);
     setSheetsInfo(data.sheets);
     const firstSheet = Object.keys(data.sheets)[0];
@@ -37,7 +67,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     setLoadingSheet(true);
     try {
       const res = await api.get(`/analysis/sheet/${sessionId}/${sheet}`, {
-        params: { page, page_size: 50 }
+        params: { page, page_size: 50, ...searchParams() }
       });
       setSheetData(res.data);
       setActiveSheet(sheet);
@@ -123,8 +153,10 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     try {
       const res = await api.post(`/analysis/load-job-session/${jobId}`);
       await processResponse(res.data);
+      return res.data as SessionResponse;
     } catch (err: any) {
       notify(err.response?.data?.detail || 'Failed to load job', 'error');
+      return null;
     } finally {
       setUploading(false);
     }
@@ -136,7 +168,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     try {
       const res = await api.get(`/analysis/session/${targetSessionId}`);
       await processResponse(res.data);
-      return res.data as { session_id: string; connected_job_id?: string | null };
+      return res.data as SessionResponse;
     } catch (err: any) {
       notify(err.response?.data?.detail || 'Session not found or expired', 'error');
       return null;
@@ -149,6 +181,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     try {
       const res = await api.get(`/analysis/download/${sessionId}`, { responseType: 'blob' });
       downloadBlob(res.data, `analysis_${sessionId.slice(0, 8)}.xlsx`);
+      notify('Export includes every row of every sheet. The search filter is not applied to the file.', 'info');
     } catch {
       notify('Failed to download file', 'error');
     }
@@ -157,6 +190,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
   const handleBack = async () => {
     try { await api.delete(`/analysis/session/${sessionId}`); } catch {}
     setSessionId('');
+    setSearchQuery('');
     setSheetsInfo({});
     setSheetData(null);
     setActiveSheet('');
@@ -189,7 +223,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
   };
 
   return {
-    sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
+    sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading, searchQuery, setSearchQuery,
     setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, handleBack,
     handleNumericFilter, processResponse
   };

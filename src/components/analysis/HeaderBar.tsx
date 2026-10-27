@@ -94,7 +94,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ref={fileInputRef}
               onChange={handleFileChange}
               multiple
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.csv"
               style={{ display: 'none' }}
             />
             <Button

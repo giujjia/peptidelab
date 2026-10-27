@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { Snackbar, Alert, AlertColor } from '@mui/material';
+import { detailToText } from '../services/errors';
 
 interface Notification {
   message: string;
@@ -19,7 +20,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [current, setCurrent] = useState<Notification>({ message: '', severity: 'info' });
 
   const notify = useCallback((message: string, severity: AlertColor = 'error') => {
-    setCurrent({ message, severity });
+    // Detalhe estruturado vindo direto da API vira texto em vez de quebrar a renderizacao
+    const text = typeof message === 'string' ? message : detailToText(message) || 'Unexpected error';
+    setCurrent({ message: text, severity });
     setOpen(true);
   }, []);
 

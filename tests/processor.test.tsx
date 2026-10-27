@@ -26,6 +26,8 @@ beforeEach(() => {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
     const url = urlOf(input);
     if (url.endsWith('/jobs/')) return Promise.resolve(jsonResponse(200, [job('ja', 'missense'), job('jb', 'indel')]));
+    // Contrato do C13: cada Job lista as saidas que gera antes do conteudo
+    if (/\/jobs\/j[ab]\/outputs$/.test(url)) return Promise.resolve(jsonResponse(200, { outputs: [{ type: 'relation', available: true }], summary: null }));
     if (url.endsWith('/jobs/ja/outputs/relation')) return relacaoA.promise;
     if (url.endsWith('/jobs/jb/outputs/relation')) return Promise.resolve(new Response('relacao-do-job-b'));
     if (url.includes('/outputs/')) return Promise.resolve(new Response(''));

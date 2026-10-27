@@ -6,12 +6,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { useJobPolling } from '../hooks/useJobPolling';
 import { api } from '../services/api';
+import { errorMessage } from '../services/errors';
 import { downloadBlob } from '../utils/download';
 import { mutationTypes } from '../components/processor/constants';
 import { MutationTypeSelector } from '../components/processor/MutationTypeSelector';
 import { JobForm } from '../components/processor/JobForm';
 import { JobsList } from '../components/processor/JobsList';
-import { ResultsViewer } from '../components/processor/ResultsViewer';
+import { ResultsViewer, JobResultsData, JobOutputView } from '../components/processor/ResultsViewer';
 import { HelpDialog } from '../components/processor/HelpDialog';
 
 const GuestHistoryNotice: React.FC = () => {
@@ -39,7 +40,7 @@ export const Processor: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   
-  const [viewJobData, setViewJobData] = useState<{ relation: string, fasta: string, dbf: string } | null>(null);
+  const [viewJobData, setViewJobData] = useState<JobResultsData | null>(null);
   const [viewJobLoading, setViewJobLoading] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   // Geracao da visualizacao; respostas de pedidos anteriores ou de outra identidade sao descartadas
@@ -170,17 +171,25 @@ export const Processor: React.FC = () => {
     }, 100);
 
     try {
-      const [relRes, fastaRes, dbfRes] = await Promise.all([
-        api.get(`/jobs/${jobId}/outputs/relation`, { responseType: 'text' }).catch(() => ({ data: '' })),
-        api.get(`/jobs/${jobId}/outputs/fasta`, { responseType: 'text' }).catch(() => ({ data: '' })),
-        api.get(`/jobs/${jobId}/outputs/dbf`, { responseType: 'text' }).catch(() => ({ data: '' }))
-      ]);
+      // Backend informa quais saidas o tipo de mutacao gera e o resumo de linhas rejeitadas
+      const { data: info } = await api.get(`/jobs/${jobId}/outputs`);
+      const outputs: JobOutputView[] = await Promise.all(
+        (info.outputs || []).map(async (o: { type: string; available: boolean }): Promise<JobOutputView> => {
+          if (!o.available) return { type: o.type, status: 'missing', content: '' };
+          try {
+            const res = await api.get(`/jobs/${jobId}/outputs/${o.type}`, { responseType: 'text' });
+            return { type: o.type, status: 'ok', content: res.data };
+          } catch {
+            return { type: o.type, status: 'error', content: '' };
+          }
+        })
+      );
       if (request !== viewRequestRef.current) return;
-      setViewJobData({ relation: relRes.data, fasta: fastaRes.data, dbf: dbfRes.data });
+      setViewJobData({ outputs, summary: info.summary || null });
     } catch (err) {
       console.error(err);
       if (request !== viewRequestRef.current) return;
-      setViewJobData({ relation: 'Error loading results', fasta: '', dbf: '' });
+      setViewJobData({ outputs: [], summary: null, error: errorMessage(err, 'Error loading results') });
     } finally {
       if (request === viewRequestRef.current) setViewJobLoading(false);
     }

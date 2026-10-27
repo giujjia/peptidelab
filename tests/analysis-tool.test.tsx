@@ -18,25 +18,45 @@ vi.mock('../src/components/analysis/UploadScreen', () => ({
   UploadScreen: ({ onUpload }: any) => <button onClick={() => onUpload([new File(['a'], 'a.csv')])}>upload</button>,
 }));
 vi.mock('../src/components/analysis/Sidebar', () => ({
-  Sidebar: ({ onIdMappingClick, onCompareClick }: any) => (
+  Sidebar: ({ onIdMappingClick, onCompareClick, onFilterClick, onDisconnectJob, connectedJobId, connectedJobInfo, filteredDataLength, totalRows }: any) => (
     <>
       <button onClick={() => onIdMappingClick(alvo)}>idmap</button>
       <button onClick={() => onCompareClick(alvo)}>compare</button>
+      <button onClick={() => onFilterClick(alvo, 'remove-contaminants')}>contaminants</button>
+      <button onClick={onDisconnectJob}>disconnect</button>
+      <span data-testid="job">{connectedJobId}|{connectedJobInfo?.mutation_type ?? ''}</span>
+      <span data-testid="rows">{filteredDataLength}/{totalRows}</span>
     </>
   ),
 }));
 vi.mock('../src/components/analysis/HeaderBar', () => ({
-  HeaderBar: ({ onNewAnalysis, hiddenColumns, onToggleColumn }: any) => (
+  HeaderBar: ({ onNewAnalysis, hiddenColumns, onToggleColumn, setSearchQuery, onDownload }: any) => (
     <>
       <button onClick={onNewAnalysis}>new</button>
       <button onClick={() => onToggleColumn('k')}>toggle-k</button>
+      <button onClick={onDownload}>download</button>
+      <input data-testid="search" onChange={(e) => setSearchQuery(e.target.value)} />
       <span data-testid="hidden">{hiddenColumns.join(',')}</span>
     </>
   ),
 }));
 vi.mock('../src/components/analysis/SheetTabs', () => ({
-  SheetTabs: ({ sheetsInfo }: any) => <span data-testid="tabs">{Object.keys(sheetsInfo).join(',')}</span>,
+  SheetTabs: ({ sheetsInfo, onChange }: any) => (
+    <>
+      <span data-testid="tabs">{Object.keys(sheetsInfo).join(',')}</span>
+      <span data-testid="cols-a">{(sheetsInfo.a?.columns || []).join(',')}</span>
+      <button onClick={() => onChange('a')}>tab-a</button>
+    </>
+  ),
 }));
+vi.mock('../src/components/analysis/FilterPopover', () => ({
+  FilterPopover: ({ anchorEl, onConfirm }: any) =>
+    anchorEl ? <button onClick={() => onConfirm({ target_column: 'k', keyword: '^x' })}>confirm-filter</button> : null,
+}));
+vi.mock('../src/components/analysis/JobsDrawer', () => ({
+  JobsDrawer: ({ onLoadJobAsSession }: any) => <button onClick={() => onLoadJobAsSession('J1')}>load-job</button>,
+}));
+vi.mock('../src/utils/download', () => ({ downloadBlob: vi.fn() }));
 vi.mock('../src/components/analysis/IdMappingPopover', () => ({
   IdMappingPopover: ({ anchorEl, onConfirm }: any) =>
     anchorEl ? <button onClick={() => onConfirm({ col_origin: 'k' })}>confirm-idmap</button> : null,
@@ -47,10 +67,8 @@ vi.mock('../src/components/analysis/ComparePopover', () => ({
 }));
 vi.mock('../src/components/analysis/DataTable', () => ({ DataTable: () => null }));
 vi.mock('../src/components/analysis/PaginationControl', () => ({ PaginationControl: () => null }));
-vi.mock('../src/components/analysis/FilterPopover', () => ({ FilterPopover: () => null }));
 vi.mock('../src/components/analysis/EsmPopover', () => ({ EsmPopover: () => null }));
 vi.mock('../src/components/analysis/CrossValPopover', () => ({ CrossValPopover: () => null }));
-vi.mock('../src/components/analysis/JobsDrawer', () => ({ JobsDrawer: () => null }));
 vi.mock('../src/components/common/TaskProgressWidget', () => ({ TaskProgressWidget: () => null }));
 
 import { AnalysisTool } from '../src/pages/AnalysisTool';
@@ -64,9 +82,10 @@ type Estado = {
 let estado: Estado;
 
 const paginaDe = (sid: string, aba: string) => {
-  const todas = estado.sessoes.find(s => s.session_id === sid)!.sheets[aba].columns as string[];
+  const info = estado.sessoes.find(s => s.session_id === sid)!.sheets[aba];
+  const todas = info.columns as string[];
   const ocultas = estado.ocultas[`${sid}/${aba}`] || [];
-  return { columns: todas.filter(c => !ocultas.includes(c)), all_columns: todas, data: [], total_rows: 0, page: 1, page_size: 50, total_pages: 1 };
+  return { sheet_name: aba, columns: todas.filter(c => !ocultas.includes(c)), all_columns: todas, data: [], total_rows: info.row_count, page: 1, page_size: 50, total_pages: 1 };
 };
 
 beforeEach(() => {
@@ -75,6 +94,7 @@ beforeEach(() => {
     sessoes: [
       { session_id: 'S1', sheets: { a: { columns: ['k', 'x'], row_count: 1 }, b: { columns: ['k'], row_count: 1 } } },
       { session_id: 'S2', sheets: { a: { columns: ['k', 'x'], row_count: 1 } } },
+      { session_id: 'S3', sheets: { a: { columns: ['k', 'x'], row_count: 2 } } },
     ],
     ocultas: { 'S1/a': ['x'] },
     status: {},
@@ -84,14 +104,27 @@ beforeEach(() => {
   apiMock.get.mockImplementation(async (url: string) => {
     const pagina = url.match(/^\/analysis\/sheet\/([^/]+)\/([^/]+)$/);
     if (pagina) return { data: paginaDe(pagina[1], pagina[2]) };
+    if (url.startsWith('/analysis/download/')) return { data: new Blob(['x']) };
     const status = url.match(/status\/(.+)$/);
     if (status) return { data: estado.status[status[1]] || { status: 'running' } };
     return { data: [] };
   });
   apiMock.post.mockImplementation(async (url: string, body: any) => {
-    if (url === '/analysis/upload') return { data: estado.sessoes[uploads++] };
+    if (url === '/analysis/upload') return { data: structuredClone(estado.sessoes[uploads++]) };
     if (url === '/analysis/run-compare') return { data: { task_id: 'T1' } };
     if (url === '/analysis/run-id-mapping') return { data: { task_id: 'M1' } };
+    if (url === '/analysis/load-job-session/J1') return { data: {
+      session_id: 'S3', sheets: { a: { columns: ['k', 'x'], row_count: 2 } },
+      connected_job_id: 'J1', connected_job_info: { mutation_type: 'missense', dbpepmutref_rows: 2 },
+    } };
+    if (url === '/analysis/disconnect-job') {
+      if (estado.toggleFalha) throw Object.assign(new Error('falhou'), { response: { status: 500, data: { detail: 'Falha ao desconectar' } } });
+      return { data: { success: true } };
+    }
+    if (url === '/analysis/remove-contaminants') {
+      if (body.dry_run) return { data: { dry_run: true, removed_count: 1, remaining_count: 1, sample_removed: ['x1'] } };
+      return { data: { message: '1 rows removed', data: paginaDe(body.session_id, body.sheet_name) } };
+    }
     if (url === '/analysis/toggle-columns') {
       if (estado.toggleFalha) throw Object.assign(new Error('falhou'), { response: { status: 500, data: { detail: 'falhou' } } });
       estado.ocultas[`${body.session_id}/${body.sheet_name}`] = body.hidden_columns;
@@ -191,5 +224,66 @@ describe('colunas ocultas vindas do servidor (I67)', () => {
     // Pedido da sessao nova leva so a coluna alternada
     const ultimo = apiMock.post.mock.calls.filter(c => c[0] === '/analysis/toggle-columns').pop()!;
     expect(ultimo[1]).toEqual({ session_id: 'S2', sheet_name: 'a', hidden_columns: ['k'] });
+  });
+});
+
+describe('contratos da tela de analise (C13)', () => {
+  const ultimaPagina = () => apiMock.get.mock.calls.filter(c => String(c[0]).startsWith('/analysis/sheet/')).pop()!;
+
+  it('busca vai ao servidor e vale para a aba inteira (I15)', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.change(screen.getByTestId('search'), { target: { value: 'NP_9' } });
+    await esperar(500);
+    expect(ultimaPagina()[1].params).toEqual({ page: 1, page_size: 50, search: 'NP_9' });
+  });
+
+  it('exportacao avisa que a busca nao se aplica ao arquivo (I15)', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('download'));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(
+      'Export includes every row of every sheet. The search filter is not applied to the file.', 'info'));
+  });
+
+  it('remocao de contaminantes mostra previa e so grava depois da confirmacao (I15, I65)', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('contaminants'));
+    fireEvent.click(screen.getByText('confirm-filter'));
+    await waitFor(() => expect(screen.getByText('1 row(s) will be removed and 1 kept.')).toBeTruthy());
+    const remocoes = () => apiMock.post.mock.calls.filter(c => c[0] === '/analysis/remove-contaminants');
+    expect(remocoes()).toHaveLength(1);
+    expect(remocoes()[0][1].dry_run).toBe(true);
+    fireEvent.click(screen.getByText('Remove 1 row(s)'));
+    await waitFor(() => expect(remocoes()).toHaveLength(2));
+    expect(remocoes()[1][1].dry_run).toBeUndefined();
+  });
+
+  it('catalogo de abas acompanha colunas novas do servidor (I17)', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    expect(screen.getByTestId('cols-a').textContent).toBe('k,x');
+    // Outra operacao acrescenta uma coluna na aba
+    estado.sessoes[0].sheets.a.columns = ['k', 'x', 'Gene'];
+    fireEvent.click(screen.getByText('tab-a'));
+    await waitFor(() => expect(screen.getByTestId('cols-a').textContent).toBe('k,x,Gene'));
+  });
+
+  it('abrir Job como sessao absorve a conexao (I14)', async () => {
+    render(<AnalysisTool />);
+    fireEvent.click(screen.getByText('load-job'));
+    await waitFor(() => expect(screen.getByTestId('job').textContent).toBe('J1|missense'));
+    expect(screen.getByTestId('rows').textContent).toBe('2/2');
+  });
+
+  it('desconectar envia so a sessao e mostra falha (I13)', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    estado.toggleFalha = true;
+    fireEvent.click(screen.getByText('disconnect'));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Falha ao desconectar', 'error'));
+    const chamada = apiMock.post.mock.calls.find(c => c[0] === '/analysis/disconnect-job')!;
+    expect(chamada[1]).toEqual({ session_id: 'S1' });
   });
 });

@@ -1,3 +1,5 @@
+import { detailToText } from './errors';
+
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 let currentToken: string | null = null;
@@ -61,12 +63,15 @@ async function request(method: string, endpoint: string, data?: any, config: Api
   const response = await fetch(url, options);
 
   if (!response.ok) {
-    let errorData;
-    try {
-      errorData = await response.json();
-    } catch {
-      const errorText = await response.text().catch(() => '');
-      errorData = errorText || `HTTP error ${response.status}`;
+    // Corpo lido uma unica vez; JSON quando possivel, senao o texto original
+    const raw = await response.text().catch(() => '');
+    let errorData: any = raw || `HTTP error ${response.status}`;
+    if (raw) {
+      try {
+        errorData = JSON.parse(raw);
+      } catch {
+        errorData = raw;
+      }
     }
 
     if (response.status === 401 && typeof window !== 'undefined') {
@@ -74,9 +79,9 @@ async function request(method: string, endpoint: string, data?: any, config: Api
     }
     
     // Simulate axios error structure with detailed message
-    const detailMsg = typeof errorData === 'object' && errorData?.detail 
-      ? (typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail))
-      : `Request failed with status code ${response.status}`;
+    const detailMsg = (typeof errorData === 'object' && detailToText(errorData?.detail))
+      || (typeof errorData === 'string' && raw ? raw.slice(0, 500) : null)
+      || `Request failed with status code ${response.status}`;
     const error = new Error(detailMsg);
     (error as any).response = { data: errorData, status: response.status };
     throw error;

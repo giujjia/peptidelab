@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { TextField, Button, Box, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { errorMessage } from '../services/errors';
 import { Link, useNavigate } from 'react-router-dom';
 
 const registerSchema = z.object({
@@ -40,7 +41,7 @@ export const Register: React.FC = () => {
       setSuccessMsg(res.data?.message || 'Se houver uma conta pendente de verificação, enviaremos uma nova mensagem.');
       setPendingEmail('');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Não foi possível reenviar agora. Tente novamente em alguns minutos.');
+      setError(errorMessage(err, 'Não foi possível reenviar agora. Tente novamente em alguns minutos.'));
     } finally {
       setResending(false);
     }
@@ -61,7 +62,7 @@ export const Register: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'An error occurred during registration');
+      setError(errorMessage(err, 'An error occurred during registration'));
     }
   };
 

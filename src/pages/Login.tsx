@@ -6,6 +6,10 @@ import { TextField, Button, Box, Typography, Paper, Alert, Dialog, DialogTitle, 
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { errorMessage } from '../services/errors';
+
+// Mesma regra do servidor para a nova senha
+const MIN_PASSWORD_LENGTH = 6;
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -65,7 +69,7 @@ export const Login: React.FC = () => {
       await login(data.email, data.password);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'An error occurred during login');
+      setError(errorMessage(err, 'An error occurred during login'));
     }
   };
 
@@ -81,7 +85,7 @@ export const Login: React.FC = () => {
       setForgotMsg({ text: 'Reset code sent to your email. Enter your new password below.', type: 'success' });
     } catch (err: any) {
       if (flow !== forgotFlowRef.current) return;
-      setForgotMsg({ text: err.response?.data?.detail || 'Failed to request password reset', type: 'error' });
+      setForgotMsg({ text: errorMessage(err, 'Failed to request password reset'), type: 'error' });
     } finally {
       if (flow === forgotFlowRef.current) setForgotLoading(false);
     }
@@ -109,7 +113,7 @@ export const Login: React.FC = () => {
       }, 1500);
     } catch (err: any) {
       if (flow !== forgotFlowRef.current) return;
-      setForgotMsg({ text: err.response?.data?.detail || 'Failed to reset password', type: 'error' });
+      setForgotMsg({ text: errorMessage(err, 'Failed to reset password'), type: 'error' });
     } finally {
       if (flow === forgotFlowRef.current) setForgotLoading(false);
     }
@@ -229,6 +233,8 @@ export const Login: React.FC = () => {
                 size="small"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                error={newPassword !== '' && newPassword.length < MIN_PASSWORD_LENGTH}
+                helperText={`At least ${MIN_PASSWORD_LENGTH} characters`}
               />
             </>
           )}
@@ -250,7 +256,7 @@ export const Login: React.FC = () => {
             <Button
               variant="contained"
               onClick={handleConfirmReset}
-              disabled={forgotLoading || !resetToken || !newPassword}
+              disabled={forgotLoading || !resetToken || newPassword.length < MIN_PASSWORD_LENGTH}
               sx={{ textTransform: 'none' }}
             >
               {forgotLoading ? 'Updating...' : 'Set New Password'}

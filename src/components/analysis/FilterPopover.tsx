@@ -97,10 +97,11 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
           <TextField
             fullWidth
             size="small"
-            label="Contaminant Keyword"
+            label="Contaminant pattern (regex)"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="e.g. contaminant"
+            helperText="Regular expression, case insensitive. Use \. to match a literal dot. You will see how many rows match before anything is removed."
           />
         )}
 

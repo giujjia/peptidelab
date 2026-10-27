@@ -22,6 +22,8 @@ import { DataTable } from '../components/analysis/DataTable';
 import { PaginationControl } from '../components/analysis/PaginationControl';
 import { TaskProgressWidget, TaskInfo } from '../components/common/TaskProgressWidget';
 import { useTaskPolling, TrackedTask, TaskOutcome } from '../hooks/useTaskPolling';
+import { RemovalConfirmDialog, RemovalPreview } from '../components/analysis/RemovalConfirmDialog';
+import { errorMessage } from '../services/errors';
 
 const FILTER_CONFIG = {
   'add-genes': { title: 'Add Gene Information', description: 'Automatically fetches and maps gene symbols from the NCBI Entrez database based on your protein identifiers (e.g. GI or Locus).' },
@@ -52,14 +54,13 @@ export const AnalysisTool: React.FC = () => {
   const {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
     setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, handleBack,
-    handleNumericFilter
+    searchQuery, setSearchQuery
   } = useSheetData(notify, fetchJobs);
 
   const {
     hiddenColumns, handleToggleColumn, handleShowAll, handleHideAll
   } = useColumnVisibility(sessionId, activeSheet, sheetData, setSheetData, notify);
 
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Job connection
   const [connectedJobId, setConnectedJobId] = useState('');
@@ -227,9 +228,33 @@ export const AnalysisTool: React.FC = () => {
     const data = await handleReopenSession(targetSessionId);
     if (data) {
       setConnectedJobId(data.connected_job_id || '');
-      setConnectedJobInfo(null);
+      setConnectedJobInfo(data.connected_job_info || null);
     }
   }, [handleReopenSession]);
+
+  const handleLoadJob = async (jobId: string) => {
+    const data = await handleLoadJobSession(jobId);
+    if (data) {
+      setConnectedJobId(data.connected_job_id || '');
+      setConnectedJobInfo(data.connected_job_info || null);
+    }
+  };
+
+  // Busca no servidor com pequena espera entre teclas
+  const searchFetchRef = useRef({ fetchSheetData, activeSheet, sessionId });
+  searchFetchRef.current = { fetchSheetData, activeSheet, sessionId };
+  const firstSearchRef = useRef(true);
+  useEffect(() => {
+    if (firstSearchRef.current) {
+      firstSearchRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      const { fetchSheetData: fetchPage, activeSheet: sheet, sessionId: sid } = searchFetchRef.current;
+      if (sid && sheet) fetchPage(sheet, 1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Link do email traz ?session_id=; abre depois que a autenticacao foi restaurada
   const { isLoading: authLoading } = useAuth();
@@ -249,12 +274,12 @@ export const AnalysisTool: React.FC = () => {
   const handleDisconnectJob = async () => {
     if (!sessionId) return;
     try {
-      await api.post('/analysis/disconnect-job', { session_id: sessionId, target_column: '' });
+      await api.post('/analysis/disconnect-job', { session_id: sessionId });
       setConnectedJobId('');
       setConnectedJobInfo(null);
       notify('Job disconnected', 'info');
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      notify(errorMessage(err, 'Failed to disconnect job'), 'error');
     }
   };
 
@@ -263,57 +288,81 @@ export const AnalysisTool: React.FC = () => {
     setFilterAnchorEl(e.currentTarget);
   };
 
-  const handleFilterConfirm = async (params: Record<string, string>) => {
-    setFilterAnchorEl(null);
-    if (!sessionId) return;
-
-    if (filterDialogType === 'filter-numeric') {
-      const thresholdNum = parseFloat(params.threshold);
-      handleNumericFilter(params.target_column, params.operator, isNaN(thresholdNum) ? 0.01 : thresholdNum);
-      return;
-    }
-
+  // Edicao que devolve a aba atualizada; 409 recarrega a aba para repetir sobre a versao atual
+  const applyEdit = async (url: string, body: Record<string, any>, errorFallback: string) => {
     setFilterLoading(true);
     try {
-      let res;
-      if (filterDialogType === 'add-genes') {
-        res = await api.post('/analysis/add-genes', {
-          session_id: sessionId,
-          sheet_name: activeSheet,
-          target_column: params.target_column,
-        });
-      } else if (filterDialogType === 'add-protein-id') {
-        const targetCol = params.target_sequence_column || params.target_column;
-        res = await api.post('/analysis/add-protein-id', {
-          session_id: sessionId,
-          target_sheet: activeSheet,
-          sheet_name: activeSheet,
-          target_sequence_column: targetCol,
-          target_column: targetCol,
-        });
-      } else if (filterDialogType === 'remove-contaminants') {
-        res = await api.post('/analysis/remove-contaminants', {
-          session_id: sessionId,
-          sheet_name: activeSheet,
-          target_column: params.target_column,
-          keyword: params.keyword || 'contaminant',
-        });
-      }
+      const res = await api.post(url, body);
       if (res?.data?.data) {
         setSheetData(res.data.data);
         notify(res.data.message, 'success');
       }
     } catch (err: any) {
       if (err.response?.status === 409) {
-        // Aba mudou em outra operacao; recarrega para o usuario repetir sobre a versao atual
         notify('This sheet was changed by another operation. It has been reloaded, please apply the action again.', 'warning');
         fetchSheetData(activeSheet, sheetData?.page || 1);
       } else {
-        notify(err.response?.data?.detail || 'Failed to apply filter', 'error');
+        notify(errorMessage(err, errorFallback), 'error');
       }
     } finally {
       setFilterLoading(false);
     }
+  };
+
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    url: string; body: Record<string, any>; description: string; preview: RemovalPreview; sessionId: string;
+  } | null>(null);
+
+  const handleFilterConfirm = async (params: Record<string, string>) => {
+    setFilterAnchorEl(null);
+    if (!sessionId) return;
+    const base = { session_id: sessionId, sheet_name: activeSheet };
+
+    if (filterDialogType === 'filter-numeric' || filterDialogType === 'remove-contaminants') {
+      let url: string;
+      let body: Record<string, any>;
+      let description: string;
+      if (filterDialogType === 'filter-numeric') {
+        const thresholdNum = parseFloat(params.threshold);
+        const threshold = isNaN(thresholdNum) ? 0.01 : thresholdNum;
+        url = '/analysis/filter-numeric';
+        body = { ...base, target_column: params.target_column, operator: params.operator, threshold };
+        description = `Keep only rows where "${params.target_column}" ${params.operator} ${threshold}.`;
+      } else {
+        const keyword = params.keyword || 'contaminant';
+        url = '/analysis/remove-contaminants';
+        body = { ...base, target_column: params.target_column, keyword };
+        description = `Remove rows where "${params.target_column}" matches the regular expression /${keyword}/ (case insensitive).`;
+      }
+      // Previa sem gravar: o usuario confirma vendo quantas linhas saem
+      setFilterLoading(true);
+      try {
+        const { data: preview } = await api.post(url, { ...body, dry_run: true });
+        setPendingRemoval({ url, body, description, preview, sessionId });
+      } catch (err: any) {
+        notify(errorMessage(err, 'Failed to preview filter'), 'error');
+      } finally {
+        setFilterLoading(false);
+      }
+      return;
+    }
+
+    if (filterDialogType === 'add-genes') {
+      await applyEdit('/analysis/add-genes', { ...base, target_column: params.target_column }, 'Failed to add genes');
+    } else if (filterDialogType === 'add-protein-id') {
+      const targetCol = params.target_sequence_column || params.target_column;
+      await applyEdit('/analysis/add-protein-id', {
+        ...base, target_sheet: activeSheet, target_sequence_column: targetCol, target_column: targetCol,
+      }, 'Failed to add protein IDs');
+    }
+  };
+
+  const handleConfirmRemoval = async () => {
+    const pending = pendingRemoval;
+    setPendingRemoval(null);
+    // Previa de outra sessao nao e aplicada
+    if (!pending || pending.sessionId !== sessionId) return;
+    await applyEdit(pending.url, pending.body, 'Failed to apply filter');
   };
 
   const handleEsmClick = (e: React.MouseEvent<HTMLElement>) => {
@@ -440,7 +489,7 @@ export const AnalysisTool: React.FC = () => {
         <JobsDrawer
           open={jobsDrawerOpen}
           onClose={() => setJobsDrawerOpen(false)}
-          onLoadJobAsSession={handleLoadJobSession}
+          onLoadJobAsSession={handleLoadJob}
           onConnectJobToSession={handleConnectJob}
           currentSessionId={sessionId}
           connectedJobId={connectedJobId}
@@ -451,12 +500,8 @@ export const AnalysisTool: React.FC = () => {
     );
   }
 
-  const filteredData = sheetData?.data.filter((row: any) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const activeCols = sheetData.columns || [];
-    return activeCols.some((col: any) => String(row[col] ?? '').toLowerCase().includes(q));
-  }) ?? [];
+  // Busca ja aplicada pelo servidor na aba inteira
+  const filteredData = sheetData?.data ?? [];
 
   const allColumns = sheetData?.all_columns ?? [];
   const currentHiddenColumns = hiddenColumns[activeSheet] || [];
@@ -464,7 +509,8 @@ export const AnalysisTool: React.FC = () => {
   return (
     <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', overflow: 'hidden' }}>
       <Sidebar 
-        filteredDataLength={filteredData.length}
+        filteredDataLength={sheetData?.total_rows ?? 0}
+        totalRows={sheetsInfo[activeSheet]?.row_count}
         sheetData={sheetData}
         connectedJobId={connectedJobId}
         connectedJobInfo={connectedJobInfo}
@@ -593,10 +639,18 @@ export const AnalysisTool: React.FC = () => {
         sheetsInfo={sheetsInfo}
       />
 
+      <RemovalConfirmDialog
+        open={!!pendingRemoval}
+        description={pendingRemoval?.description || ''}
+        preview={pendingRemoval?.preview || null}
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={handleConfirmRemoval}
+      />
+
       <JobsDrawer
         open={jobsDrawerOpen}
         onClose={() => setJobsDrawerOpen(false)}
-        onLoadJobAsSession={handleLoadJobSession}
+        onLoadJobAsSession={handleLoadJob}
         onConnectJobToSession={handleConnectJob}
         currentSessionId={sessionId}
         connectedJobId={connectedJobId}

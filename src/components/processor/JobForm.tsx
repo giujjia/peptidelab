@@ -124,7 +124,8 @@ export const JobForm: React.FC<JobFormProps> = ({
           <FileDropzone 
             onFileSelect={(files) => setSelectedFile(files.length > 0 ? files[0] : null)} 
             selectedFiles={selectedFile ? [selectedFile] : []} 
-            accept=".fasta,.csv,.xlsx,.txt"
+            accept=".txt,.tsv,.csv"
+            hint="Plain text file (.txt, .tsv or .csv), one mutation per line in the format shown in Text Input"
           />
           {isFileLimitExceeded && selectedFile && (
             <Typography variant="caption" color="error" sx={{ display: "block", mt: 1, fontWeight: 500 }}>

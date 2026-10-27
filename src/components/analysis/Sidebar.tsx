@@ -12,6 +12,7 @@ import { AvailableJob, SheetData } from '../../types';
 
 interface SidebarProps {
   filteredDataLength: number;
+  totalRows?: number;
   sheetData: SheetData | null;
   connectedJobId: string;
   connectedJobInfo: { mutation_type: string; dbpepmutref_rows: number } | null;
@@ -33,7 +34,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  filteredDataLength, sheetData, connectedJobId, connectedJobInfo, availableJobs, connectingJob,
+  filteredDataLength, totalRows, sheetData, connectedJobId, connectedJobInfo, availableJobs, connectingJob,
   filterLoading, filterDialogType, esmRunning, idMappingRunning,
   onConnectJob, onDisconnectJob, onFilterClick, onFilterNumericClick, onEsmClick, onIdMappingClick, onCompareClick, onCrossValClick, onResetFilters
 }) => {
@@ -46,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         Filters & Columns
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5 }}>
-        {filteredDataLength} of {sheetData?.total_rows ?? 0} rows
+        {filteredDataLength} of {totalRows ?? sheetData?.total_rows ?? 0} rows
       </Typography>
 
       {/* Job Connection */}
@@ -171,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={onResetFilters}
         sx={{ textTransform: 'none', color: 'primary.main', fontWeight: 500, mb: 1.5, alignSelf: 'flex-start', fontSize: '12px', p: 0, minWidth: 0 }}
       >
-        Reset Filters
+        Clear Search
       </Button>
 
       <Divider sx={{ mb: 1.5 }} />

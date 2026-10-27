@@ -25,7 +25,51 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(false);
+    try {
+      const savedToken = localStorage.getItem('peptidelab_token');
+      const savedUser = localStorage.getItem('peptidelab_user');
+      if (savedToken) {
+        // Valida se o JWT expirou
+        let isExpired = false;
+        try {
+          const payloadStr = atob(savedToken.split('.')[1]);
+          const payload = JSON.parse(payloadStr);
+          if (payload.exp && payload.exp * 1000 < Date.now()) {
+            isExpired = true;
+          }
+        } catch {
+          isExpired = true;
+        }
+
+        if (isExpired) {
+          localStorage.removeItem('peptidelab_token');
+          localStorage.removeItem('peptidelab_user');
+        } else {
+          setSession({ access_token: savedToken });
+          setAuthToken(savedToken);
+          if (savedUser) {
+            setUser(JSON.parse(savedUser));
+          }
+        }
+      }
+    } catch {
+      // Ignora erro de acesso a localStorage
+    } finally {
+      setIsLoading(false);
+    }
+
+    const handleUnauthorized = () => {
+      setSession(null);
+      setUser(null);
+      setAuthToken(null);
+      localStorage.removeItem('peptidelab_token');
+      localStorage.removeItem('peptidelab_user');
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
   }, []);
 
   const login = async (email: string, pass: string) => {
@@ -33,14 +77,18 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     if (data && data.access_token) {
       setSession({ access_token: data.access_token });
       setAuthToken(data.access_token);
+      localStorage.setItem('peptidelab_token', data.access_token);
 
+      let u: User;
       try {
         const payloadStr = atob(data.access_token.split('.')[1]);
         const payload = JSON.parse(payloadStr);
-        setUser({ id: payload.sub, email });
-      } catch (e) {
-        setUser({ id: '', email });
+        u = { id: payload.sub, email };
+      } catch {
+        u = { id: '', email };
       }
+      setUser(u);
+      localStorage.setItem('peptidelab_user', JSON.stringify(u));
     }
     return data;
   };
@@ -50,13 +98,18 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     if (data && data.access_token) {
       setSession({ access_token: data.access_token });
       setAuthToken(data.access_token);
+      localStorage.setItem('peptidelab_token', data.access_token);
+
+      let u: User;
       try {
         const payloadStr = atob(data.access_token.split('.')[1]);
         const payload = JSON.parse(payloadStr);
-        setUser({ id: payload.sub, email });
-      } catch (e) {
-        setUser({ id: '', email });
+        u = { id: payload.sub, email };
+      } catch {
+        u = { id: '', email };
       }
+      setUser(u);
+      localStorage.setItem('peptidelab_user', JSON.stringify(u));
     }
     return data;
   };
@@ -66,12 +119,14 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       if (session?.access_token) {
         await api.post('/auth/logout');
       }
-    } catch (e) {
+    } catch {
       // Falha silenciosa no logout
     } finally {
       setSession(null);
       setUser(null);
       setAuthToken(null);
+      localStorage.removeItem('peptidelab_token');
+      localStorage.removeItem('peptidelab_user');
     }
   };
 
@@ -84,6 +139,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       setSession(null);
       setUser(null);
       setAuthToken(null);
+      localStorage.removeItem('peptidelab_token');
+      localStorage.removeItem('peptidelab_user');
     }
   };
 

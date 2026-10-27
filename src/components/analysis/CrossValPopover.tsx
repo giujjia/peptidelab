@@ -57,8 +57,8 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
       setColunasEmComum(comuns);
       setJoinKeys(prev => prev.filter(k => comuns.includes(k)));
       
-      if (!colsA.includes(scoreColA)) setScoreColA('');
-      if (!colsB.includes(scoreColB)) setScoreColB('');
+      setScoreColA(prev => (colsA.includes(prev) ? prev : ''));
+      setScoreColB(prev => (colsB.includes(prev) ? prev : ''));
     } else {
       setColunasEmComum([]);
       setJoinKeys([]);

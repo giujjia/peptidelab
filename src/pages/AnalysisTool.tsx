@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, LinearProgress, Typography } from '@mui/material';
 import { api } from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
@@ -80,30 +80,87 @@ export const AnalysisTool: React.FC = () => {
   const [crossValAnchorEl, setCrossValAnchorEl] = useState<null | HTMLElement>(null);
   const [compareTaskId, setCompareTaskId] = useState<string | null>(null);
 
-  // Task listener (ESM-1v)
+  // Polling para ESM-1v
+  const isEsmPollingRef = useRef(false);
+  const esmTaskId = esmTask?.taskId;
+  const esmTaskStatus = esmTask?.status;
+  const esmTaskSheet = esmTask?.sheetName;
+  const esmTaskSession = esmTask?.sessionId;
+
   useEffect(() => {
-    const handleTaskUpdated = (e: any) => {
-      const detail = e.detail;
-      if (!detail) return;
-      if (detail.status === 'done') {
-        fetchSheetData(activeSheet, sheetData?.page || 1);
+    if (!esmTaskId || (esmTaskStatus !== 'pending' && esmTaskStatus !== 'running')) return;
+
+    let failCount = 0;
+    let isCancelled = false;
+
+    const poll = async () => {
+      if (isEsmPollingRef.current || isCancelled) return;
+      isEsmPollingRef.current = true;
+
+      try {
+        const { data } = await api.get(`/analysis/task/${esmTaskId}`);
+        if (isCancelled) return;
+
+        failCount = 0;
+        setEsmTask(prev => {
+          if (!prev || prev.taskId !== esmTaskId) return prev;
+          return {
+            ...prev,
+            status: data.status,
+            progress: data.processed ?? prev.progress,
+            total: data.total ?? prev.total,
+            error: data.error,
+          };
+        });
+
+        if (data.status === 'done') {
+          notify('ESM-1v scoring complete!', 'success');
+          if (esmTaskSession === sessionId && esmTaskSheet === activeSheet) {
+            fetchSheetData(activeSheet, sheetData?.page || 1);
+          } else if (esmTaskSheet) {
+            notify(`Results ready on sheet "${esmTaskSheet}"`, 'info');
+          }
+        } else if (data.status === 'error') {
+          notify(`ESM-1v Error: ${data.error || 'Execution failed'}`, 'error');
+        }
+      } catch {
+        if (isCancelled) return;
+        failCount++;
+        if (failCount >= 5) {
+          setEsmTask(prev => prev && prev.taskId === esmTaskId ? { ...prev, status: 'error', error: 'Polling stopped due to repeated network errors' } : prev);
+          notify('ESM-1v polling stopped due to network errors', 'error');
+        }
+      } finally {
+        isEsmPollingRef.current = false;
       }
     };
-    window.addEventListener('task_updated', handleTaskUpdated);
-    return () => window.removeEventListener('task_updated', handleTaskUpdated);
-  }, [activeSheet, sheetData?.page, fetchSheetData]);
+
+    const interval = setInterval(poll, 2000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+      isEsmPollingRef.current = false;
+    };
+  }, [esmTaskId, esmTaskStatus, esmTaskSheet, esmTaskSession, sessionId, activeSheet, sheetData?.page, fetchSheetData, notify]);
 
   // Polling para Compare & Cross-Validation
+  const isComparePollingRef = useRef(false);
   useEffect(() => {
     if (!compareTaskId) return;
 
     let failCount = 0;
-    const interval = setInterval(async () => {
+    let isCancelled = false;
+
+    const pollCompare = async () => {
+      if (isComparePollingRef.current || isCancelled) return;
+      isComparePollingRef.current = true;
+
       try {
         const { data } = await api.get(`/analysis/compare-status/${compareTaskId}`);
+        if (isCancelled) return;
         failCount = 0;
         if (data.status === 'done') {
-          clearInterval(interval);
           setCompareTaskId(null);
           notify(`Comparison complete! New tab: "${data.nova_aba}"`, 'success');
           
@@ -115,21 +172,28 @@ export const AnalysisTool: React.FC = () => {
             fetchSheetData(data.nova_aba, 1);
           }
         } else if (data.status === 'error') {
-          clearInterval(interval);
           setCompareTaskId(null);
           notify(`Compare Error: ${data.error}`, 'error');
         }
-      } catch (err) {
+      } catch {
+        if (isCancelled) return;
         failCount++;
         if (failCount >= 5) {
-          clearInterval(interval);
           setCompareTaskId(null);
           notify('Comparison polling stopped due to network errors', 'error');
         }
+      } finally {
+        isComparePollingRef.current = false;
       }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [compareTaskId, sessionId, setSheetsInfo, notify, fetchSheetData]);
+    };
+
+    const interval = setInterval(pollCompare, 2000);
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+      isComparePollingRef.current = false;
+    };
+  }, [compareTaskId, setSheetsInfo, notify, fetchSheetData]);
 
   const handleConnectJob = async (jobId: string) => {
     if (!jobId || !sessionId) return;
@@ -189,10 +253,13 @@ export const AnalysisTool: React.FC = () => {
           target_column: params.target_column,
         });
       } else if (filterDialogType === 'add-protein-id') {
+        const targetCol = params.target_sequence_column || params.target_column;
         res = await api.post('/analysis/add-protein-id', {
           session_id: sessionId,
+          target_sheet: activeSheet,
           sheet_name: activeSheet,
-          target_column: params.target_column,
+          target_sequence_column: targetCol,
+          target_column: targetCol,
         });
       } else if (filterDialogType === 'remove-contaminants') {
         res = await api.post('/analysis/remove-contaminants', {
@@ -226,7 +293,7 @@ export const AnalysisTool: React.FC = () => {
   }) => {
     setEsmAnchorEl(null);
     try {
-      const res = await api.post('/analysis/run-esm', {
+      const res = await api.post('/analysis/run-esm1v', {
         session_id: sessionId,
         sheet_name: activeSheet,
         ...params,
@@ -237,6 +304,8 @@ export const AnalysisTool: React.FC = () => {
         status: 'pending',
         progress: 0,
         total: res.data.total_rows,
+        sheetName: activeSheet,
+        sessionId: sessionId,
       });
       notify('ESM-1v task scheduled successfully in background!', 'success');
     } catch (err: any) {
@@ -246,7 +315,7 @@ export const AnalysisTool: React.FC = () => {
 
   const handleCancelTask = async (taskId: string) => {
     try {
-      await api.post(`/analysis/cancel-esm/${taskId}`);
+      await api.post(`/analysis/task/${taskId}/cancel`);
       setEsmTask((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
       notify('Task cancelled', 'info');
     } catch (err: any) {

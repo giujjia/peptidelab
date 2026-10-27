@@ -38,9 +38,7 @@ export const ComparePopover: React.FC<ComparePopoverProps> = ({
       const colsB = sheetsInfo[sheetB].columns || [];
       const comuns = colsA.filter(c => colsB.includes(c));
       setColunasEmComum(comuns);
-      if (!comuns.includes(colKey)) {
-        setColKey('');
-      }
+      setColKey(prev => (comuns.includes(prev) ? prev : ''));
     } else {
       setColunasEmComum([]);
       setColKey('');

@@ -134,7 +134,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     try {
       const res = await api.get(`/analysis/download/${sessionId}`, { responseType: 'blob' });
       downloadBlob(res.data, `analysis_${sessionId.slice(0, 8)}.xlsx`);
-    } catch (err) {
+    } catch {
       notify('Failed to download file', 'error');
     }
   };

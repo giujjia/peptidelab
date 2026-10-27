@@ -18,6 +18,8 @@ export interface TaskInfo {
   progress: number;
   total: number;
   error?: string | null;
+  sheetName?: string;
+  sessionId?: string;
 }
 
 interface TaskProgressWidgetProps {

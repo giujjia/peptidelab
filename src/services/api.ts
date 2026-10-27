@@ -60,9 +60,13 @@ async function request(method: string, endpoint: string, data?: any, config: Api
     let errorData;
     try {
       errorData = await response.json();
-    } catch (e) {
+    } catch {
       const errorText = await response.text().catch(() => '');
       errorData = errorText || `HTTP error ${response.status}`;
+    }
+
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
     
     // Simulate axios error structure with detailed message

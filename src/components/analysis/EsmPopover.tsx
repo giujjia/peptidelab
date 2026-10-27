@@ -172,22 +172,23 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
         </FormControl>
 
         {isAuthenticated && !isBlockedGuest && (
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={notifyEmail}
-                onChange={(e) => setNotifyEmail(e.target.checked)}
-                size="small"
-                color="primary"
-              />
-            }
-            label={
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Notify me by email when finished
-              </Typography>
-            }
-            sx={{ mt: -0.5, mb: -0.5 }}
-          />
+          <Box sx={{ mt: -0.5, mb: -0.5 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={notifyEmail}
+                  onChange={(e) => setNotifyEmail(e.target.checked)}
+                  size="small"
+                  color="primary"
+                />
+              }
+              label={
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  Avise-me por e-mail quando a análise terminar
+                </Typography>
+              }
+            />
+          </Box>
         )}
 
         <Button 

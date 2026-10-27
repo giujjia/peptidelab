@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Drawer,
   Box,
@@ -70,7 +70,7 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -85,13 +85,13 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (open) {
       fetchData();
     }
-  }, [open, user]);
+  }, [open, fetchData]);
 
   const handleLoadJob = async (jobId: string) => {
     setActionLoadingId(jobId);

@@ -1,10 +1,11 @@
-// Conta trocada em outra aba (F01), verificacao de e-mail (F02, N01), reset de senha (N02)
+// Conta trocada em outra aba (F01), verificacao de e-mail (F02, N01), reset de senha (N02) e formatos do Processor (N04)
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { Processor } from '../src/pages/Processor';
 import { ResetPassword } from '../src/pages/ResetPassword';
+import { FileDropzone } from '../src/components/FileDropzone';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NotificationProvider } from '../src/contexts/NotificationContext';
 import { jwt, jsonResponse, deferred, urlOf } from './helpers';
@@ -116,5 +117,25 @@ describe('reset de senha (N02)', () => {
     await waitFor(() => expect(screen.getByText(/every device signed in/)).toBeTruthy());
     expect(localStorage.getItem('peptidelab_token')).toBeNull();
     expect(localStorage.getItem('peptidelab_user')).toBeNull();
+  });
+});
+
+describe('formatos no Processor (N04)', () => {
+  const escolher = (nome: string) => {
+    const onFileSelect = vi.fn();
+    const { container } = render(<FileDropzone accept=".txt,.tsv,.csv" onFileSelect={onFileSelect} selectedFiles={[]} />);
+    const input = container.querySelector('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [new File(['>x'], nome)] } });
+    return onFileSelect;
+  };
+
+  it('arquivo fora dos formatos aceitos e recusado na selecao', () => {
+    expect(escolher('sequencias.fasta')).not.toHaveBeenCalled();
+    expect(screen.getByText(/Not accepted: sequencias.fasta/)).toBeTruthy();
+  });
+
+  it('arquivo aceito segue para o formulario', () => {
+    expect(escolher('mutacoes.TSV')).toHaveBeenCalledWith([expect.objectContaining({ name: 'mutacoes.TSV' })]);
+    expect(screen.queryByText(/Not accepted/)).toBeNull();
   });
 });

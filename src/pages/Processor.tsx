@@ -90,7 +90,7 @@ export const Processor: React.FC = () => {
         await fetchJobs();
       } catch (err) {
         console.error("Error creating job", err);
-        notify('Failed to submit job');
+        notify(errorMessage(err, 'Failed to submit job'));
       } finally {
         setIsSubmitting(false);
       }

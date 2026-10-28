@@ -122,7 +122,7 @@ beforeEach(() => {
       return { data: { success: true } };
     }
     if (url === '/analysis/remove-contaminants') {
-      if (body.dry_run) return { data: { dry_run: true, removed_count: 1, remaining_count: 1, sample_removed: ['x1'] } };
+      if (body.dry_run) return { data: { dry_run: true, removed_count: 1, remaining_count: 1, sample_removed: ['x1'], sheet_version: 7 } };
       return { data: { message: '1 rows removed', data: paginaDe(body.session_id, body.sheet_name) } };
     }
     if (url === '/analysis/toggle-columns') {
@@ -258,6 +258,8 @@ describe('contratos da tela de analise (C13)', () => {
     fireEvent.click(screen.getByText('Remove 1 row(s)'));
     await waitFor(() => expect(remocoes()).toHaveLength(2));
     expect(remocoes()[1][1].dry_run).toBeUndefined();
+    // Confirmacao vale para a versao mostrada na previa (N03)
+    expect(remocoes()[1][1].expected_version).toBe(7);
   });
 
   it('catalogo de abas acompanha colunas novas do servidor (I17)', async () => {

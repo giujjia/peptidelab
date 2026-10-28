@@ -5,6 +5,7 @@ export interface RemovalPreview {
   removed_count: number;
   remaining_count: number;
   sample_removed: string[];
+  sheet_version?: number | null;
 }
 
 interface RemovalConfirmDialogProps {

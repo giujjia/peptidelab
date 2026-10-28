@@ -362,7 +362,8 @@ export const AnalysisTool: React.FC = () => {
     setPendingRemoval(null);
     // Previa de outra sessao nao e aplicada
     if (!pending || pending.sessionId !== sessionId) return;
-    await applyEdit(pending.url, pending.body, 'Failed to apply filter');
+    // Remocao vale para a versao da aba mostrada na previa; se outra aba mudou a planilha, volta 409
+    await applyEdit(pending.url, { ...pending.body, expected_version: pending.preview.sheet_version ?? null }, 'Failed to apply filter');
   };
 
   const handleEsmClick = (e: React.MouseEvent<HTMLElement>) => {

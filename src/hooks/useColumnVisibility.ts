@@ -7,7 +7,8 @@ export function useColumnVisibility(
   activeSheet: string,
   sheetData: SheetData | null,
   setSheetData: (data: any) => void,
-  notify: (msg: string, type?: 'success' | 'error' | 'info') => void
+  notify: (msg: string, type?: 'success' | 'error' | 'info') => void,
+  searchQuery = ''
 ) {
   // Ocultas vem sempre da ultima resposta do servidor para a aba atual, sem estado local paralelo
   const hidden = sheetData ? sheetData.all_columns.filter(c => !sheetData.columns.includes(c)) : [];
@@ -29,6 +30,9 @@ export function useColumnVisibility(
         session_id: origin.sessionId,
         sheet_name: origin.activeSheet,
         hidden_columns: updated,
+        // Mesma pagina e busca da tela, para a tabela filtrada nao virar a aba inteira
+        page: sheetData?.page || 1,
+        ...(searchQuery.trim() ? { search: searchQuery.trim() } : {}),
       });
       if (sameContext()) setSheetData(res.data.data);
     } catch (err: any) {

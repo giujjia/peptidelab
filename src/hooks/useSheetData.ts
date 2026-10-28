@@ -109,6 +109,9 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
 
   const handleImportFiles = async (files: File[]) => {
     if (!sessionId || files.length === 0) return;
+    const origin = sessionId;
+    // Resposta que chega depois do New Analysis pertence a sessao anterior
+    const sameSession = () => sessaoRef.current === origin;
     setLoadingSheet(true);
     const formData = new FormData();
     formData.append('session_id', sessionId);
@@ -119,6 +122,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       const res = await api.post('/analysis/import-files', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      if (!sameSession()) return;
       setSheetsInfo(res.data.sheets);
       const firstNew = res.data.new_sheets?.[0];
       if (firstNew) {
@@ -127,9 +131,9 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       }
       notify(res.data.message || 'Files imported successfully!', 'success');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to import files', 'error');
+      if (sameSession()) notify(err.response?.data?.detail || 'Failed to import files', 'error');
     } finally {
-      setLoadingSheet(false);
+      if (sameSession()) setLoadingSheet(false);
     }
   };
 

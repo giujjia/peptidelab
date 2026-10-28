@@ -69,7 +69,7 @@ export const AnalysisTool: React.FC = () => {
 
   const {
     hiddenColumns, handleToggleColumn, handleShowAll, handleHideAll
-  } = useColumnVisibility(sessionId, activeSheet, sheetData, setSheetData, notify);
+  } = useColumnVisibility(sessionId, activeSheet, sheetData, setSheetData, notify, searchQuery);
 
 
   // Job connection
@@ -299,15 +299,22 @@ export const AnalysisTool: React.FC = () => {
   };
 
   // Edicao que devolve a aba atualizada; 409 recarrega a aba para repetir sobre a versao atual
+  // Sessao exibida agora, para descartar resposta de edicao iniciada antes do New Analysis
+  const currentSessionRef = useRef(sessionId);
+  currentSessionRef.current = sessionId;
+
   const applyEdit = async (url: string, body: Record<string, any>, errorFallback: string) => {
     setFilterLoading(true);
+    const sameSession = () => currentSessionRef.current === body.session_id;
     try {
       const res = await api.post(url, body);
+      if (!sameSession()) return;
       if (res?.data?.data) {
         setSheetData(res.data.data);
         notify(res.data.message, 'success');
       }
     } catch (err: any) {
+      if (!sameSession()) return;
       if (err.response?.status === 409) {
         notify('This sheet was changed by another operation. It has been reloaded, please apply the action again.', 'warning');
         fetchSheetData(activeSheet, sheetData?.page || 1);

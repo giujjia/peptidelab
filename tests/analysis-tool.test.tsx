@@ -2,6 +2,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { deferred } from './helpers';
 
 const { notify, apiMock, alvo } = vi.hoisted(() => ({
   notify: vi.fn(),
@@ -30,9 +31,10 @@ vi.mock('../src/components/analysis/Sidebar', () => ({
   ),
 }));
 vi.mock('../src/components/analysis/HeaderBar', () => ({
-  HeaderBar: ({ onNewAnalysis, hiddenColumns, onToggleColumn, setSearchQuery, onDownload }: any) => (
+  HeaderBar: ({ onNewAnalysis, hiddenColumns, onToggleColumn, setSearchQuery, onDownload, onImportFiles }: any) => (
     <>
       <button onClick={onNewAnalysis}>new</button>
+      <button onClick={() => onImportFiles([new File(['p'], 'vazou.csv')])}>import</button>
       <button onClick={() => onToggleColumn('k')}>toggle-k</button>
       <button onClick={onDownload}>download</button>
       <input data-testid="search" onChange={(e) => setSearchQuery(e.target.value)} />
@@ -78,6 +80,8 @@ type Estado = {
   ocultas: Record<string, string[]>;
   status: Record<string, any>;
   toggleFalha: boolean;
+  // Resposta segurada ate o teste liberar, por rota
+  atrasos: Record<string, Promise<unknown>>;
 };
 let estado: Estado;
 
@@ -99,6 +103,7 @@ beforeEach(() => {
     ocultas: { 'S1/a': ['x'] },
     status: {},
     toggleFalha: false,
+    atrasos: {},
   };
   let uploads = 0;
   apiMock.get.mockImplementation(async (url: string) => {
@@ -110,6 +115,7 @@ beforeEach(() => {
     return { data: [] };
   });
   apiMock.post.mockImplementation(async (url: string, body: any) => {
+    if (estado.atrasos[url] && !body?.dry_run) await estado.atrasos[url];
     if (url === '/analysis/upload') return { data: structuredClone(estado.sessoes[uploads++]) };
     if (url === '/analysis/run-compare') return { data: { task_id: 'T1' } };
     if (url === '/analysis/run-id-mapping') return { data: { task_id: 'M1' } };
@@ -129,6 +135,10 @@ beforeEach(() => {
       if (estado.toggleFalha) throw Object.assign(new Error('falhou'), { response: { status: 500, data: { detail: 'falhou' } } });
       estado.ocultas[`${body.session_id}/${body.sheet_name}`] = body.hidden_columns;
       return { data: { data: paginaDe(body.session_id, body.sheet_name) } };
+    }
+    if (url === '/analysis/import-files') {
+      const sid = body.get('session_id');
+      return { data: { sheets: { ...estado.sessoes.find(s => s.session_id === sid)!.sheets, vazou_data: { columns: ['p'], row_count: 1 } }, new_sheets: ['vazou_data'], message: 'importado' } };
     }
     return { data: {} };
   });
@@ -223,7 +233,7 @@ describe('colunas ocultas vindas do servidor (I67)', () => {
     await esperar(50);
     // Pedido da sessao nova leva so a coluna alternada
     const ultimo = apiMock.post.mock.calls.filter(c => c[0] === '/analysis/toggle-columns').pop()!;
-    expect(ultimo[1]).toEqual({ session_id: 'S2', sheet_name: 'a', hidden_columns: ['k'] });
+    expect(ultimo[1]).toEqual({ session_id: 'S2', sheet_name: 'a', hidden_columns: ['k'], page: 1 });
   });
 });
 
@@ -287,5 +297,70 @@ describe('contratos da tela de analise (C13)', () => {
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Falha ao desconectar', 'error'));
     const chamada = apiMock.post.mock.calls.find(c => c[0] === '/analysis/disconnect-job')!;
     expect(chamada[1]).toEqual({ session_id: 'S1' });
+  });
+});
+
+describe('resposta da sessao anterior depois do New Analysis (C20)', () => {
+  const novaSessao = async () => {
+    fireEvent.click(screen.getByText('new'));
+    await waitFor(() => expect(screen.getByText('upload')).toBeTruthy());
+    await abrirSessao();
+    await esperar(50);
+  };
+
+  it('remocao atrasada da sessao A nao muda a tabela da sessao B (F03)', async () => {
+    const liberar = deferred<void>();
+    estado.atrasos['/analysis/remove-contaminants'] = liberar.promise;
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('contaminants'));
+    fireEvent.click(screen.getByText('confirm-filter'));
+    await waitFor(() => expect(screen.getByText('Remove 1 row(s)')).toBeTruthy());
+    fireEvent.click(screen.getByText('Remove 1 row(s)'));
+    await novaSessao();
+    estado.sessoes[0].sheets.a.row_count = 99;
+    await act(async () => {
+      liberar.resolve();
+      await liberar.promise;
+    });
+    await esperar(50);
+    expect(screen.getByTestId('rows').textContent).not.toContain('99');
+    expect(notify).not.toHaveBeenCalledWith('1 rows removed', 'success');
+  });
+
+  it('importacao atrasada da sessao A nao cria aba na sessao B (F05)', async () => {
+    const liberar = deferred<void>();
+    estado.atrasos['/analysis/import-files'] = liberar.promise;
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('import'));
+    await novaSessao();
+    await act(async () => {
+      liberar.resolve();
+      await liberar.promise;
+    });
+    await esperar(50);
+    expect(screen.getByTestId('tabs').textContent).toBe('a');
+    expect(chamadas('/analysis/sheet/S2/vazou_data')).toBe(0);
+  });
+
+  it('importacao na propria sessao continua abrindo a aba nova', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('import'));
+    await waitFor(() => expect(screen.getByTestId('tabs').textContent).toBe('a,b,vazou_data'));
+  });
+});
+
+describe('colunas com busca ativa (F04)', () => {
+  it('alternar coluna envia a busca da tela', async () => {
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.change(screen.getByTestId('search'), { target: { value: 'PEPTIDE_TWO' } });
+    await esperar(500);
+    fireEvent.click(screen.getByText('toggle-k'));
+    await esperar(50);
+    const ultimo = apiMock.post.mock.calls.filter(c => c[0] === '/analysis/toggle-columns').pop()!;
+    expect(ultimo[1]).toMatchObject({ session_id: 'S1', search: 'PEPTIDE_TWO', page: 1 });
   });
 });

@@ -8,10 +8,40 @@ import { api } from '../services/api';
 // Um pedido por token, compartilhado entre montagens; o token e de uso unico no servidor
 const verifications = new Map<string, Promise<void>>();
 
+// Tokens ja confirmados neste navegador, para o link reaberto em outra aba ou depois de recarregar
+const VERIFIED_KEY = 'peptidelab_verified_tokens';
+const MAX_VERIFIED = 10;
+
+const readVerified = (): string[] => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+};
+
+const rememberVerified = (token: string) => {
+  try {
+    const tokens = [token, ...readVerified().filter(t => t !== token)].slice(0, MAX_VERIFIED);
+    localStorage.setItem(VERIFIED_KEY, JSON.stringify(tokens));
+  } catch {
+    // Sem storage o link reaberto volta a depender do servidor
+  }
+};
+
 export const verifyEmailToken = (token: string) => {
+  if (readVerified().includes(token)) return Promise.resolve();
   let pending = verifications.get(token);
   if (!pending) {
-    pending = api.post('/auth/verify-email', { token }).then(() => undefined);
+    pending = api.post('/auth/verify-email', { token }).then(
+      () => rememberVerified(token),
+      (err) => {
+        // So o sucesso fica guardado; falha passageira pode ser tentada de novo
+        verifications.delete(token);
+        throw err;
+      },
+    );
     verifications.set(token, pending);
   }
   return pending;

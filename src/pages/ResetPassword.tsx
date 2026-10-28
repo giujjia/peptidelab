@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Box, Paper, Typography, TextField, Button, Alert } from '@mui/material';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { errorMessage } from '../services/errors';
 import { passwordLength, PASSWORD_MIN_LENGTH } from '../services/accountRules';
 
@@ -14,6 +15,7 @@ export const ResetPassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const { clearLocalSession } = useAuth();
 
   const shortPassword = password !== '' && passwordLength(password) < PASSWORD_MIN_LENGTH;
   const mismatch = confirm !== '' && confirm !== password;
@@ -26,6 +28,8 @@ export const ResetPassword: React.FC = () => {
     setError('');
     try {
       await api.post('/auth/reset-password', { token, new_password: password });
+      // O servidor encerrou todas as sessoes da conta; esta aba e as outras saem agora
+      clearLocalSession();
       setDone(true);
     } catch (err: any) {
       setError(errorMessage(err, 'Failed to reset password'));

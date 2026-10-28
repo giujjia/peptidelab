@@ -34,7 +34,9 @@ const GuestHistoryNotice: React.FC = () => {
 
 export const Processor: React.FC = () => {
   const { notify } = useNotification();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, session } = useAuth();
+  // Muda no logout e tambem na troca direta de conta feita em outra aba
+  const identity = session?.access_token ?? null;
   
   const [mutationType, setMutationType] = useState("missense");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,12 +49,10 @@ export const Processor: React.FC = () => {
   const viewRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      viewRequestRef.current += 1;
-      setViewJobData(null);
-      setViewJobLoading(false);
-    }
-  }, [isAuthenticated]);
+    viewRequestRef.current += 1;
+    setViewJobData(null);
+    setViewJobLoading(false);
+  }, [identity]);
 
   const handleCloseResults = () => {
     viewRequestRef.current += 1;
@@ -60,7 +60,7 @@ export const Processor: React.FC = () => {
     setViewJobLoading(false);
   };
 
-  const { jobs, fetchJobs } = useJobPolling(isAuthenticated);
+  const { jobs, fetchJobs } = useJobPolling(identity);
   const current = mutationTypes.find((m) => m.id === mutationType)!;
 
   if (isLoading) {

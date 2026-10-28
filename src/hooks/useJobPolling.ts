@@ -2,13 +2,14 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { Job } from '../types';
 
-export function useJobPolling(isAuthenticated: boolean) {
+// identity muda a cada login, inclusive na troca direta de uma conta para outra
+export function useJobPolling(identity: string | null) {
   const [jobs, setJobs] = useState<Job[]>([]);
   // Lista pertence a identidade que a pediu; troca de identidade descarta respostas pendentes
   const generationRef = useRef(0);
 
   const fetchJobs = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!identity) return;
     const generation = generationRef.current;
     try {
       const response = await api.get('/jobs/');
@@ -16,12 +17,12 @@ export function useJobPolling(isAuthenticated: boolean) {
     } catch (err) {
       console.error("Failed to fetch jobs", err);
     }
-  }, [isAuthenticated]);
+  }, [identity]);
 
   useEffect(() => {
     generationRef.current += 1;
-    if (!isAuthenticated) setJobs([]);
-  }, [isAuthenticated]);
+    setJobs([]);
+  }, [identity]);
 
   useEffect(() => {
     fetchJobs();

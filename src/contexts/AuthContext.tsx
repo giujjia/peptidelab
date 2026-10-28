@@ -12,6 +12,8 @@ interface AuthContextData {
   login: (email: string, pass: string) => Promise<any>;
   registerAccount: (email: string, pass: string) => Promise<any>;
   logout: () => Promise<{ revoked: boolean }>;
+  // Sai so neste navegador, para quando o servidor ja revogou as sessoes
+  clearLocalSession: () => void;
   deleteAccount: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -163,6 +165,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     return { revoked };
   };
 
+  const clearLocalSession = useCallback(() => applyIdentity(null, null), [applyIdentity]);
+
   // Identidade so e limpa depois que o servidor confirma a desativacao
   const deleteAccount = async () => {
     if (session?.access_token) {
@@ -172,7 +176,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, login, registerAccount, logout, deleteAccount, isAuthenticated: !!session, isLoading }}>
+    <AuthContext.Provider value={{ session, user, login, registerAccount, logout, clearLocalSession, deleteAccount, isAuthenticated: !!session, isLoading }}>
       {!isLoading && children}
     </AuthContext.Provider>
   );

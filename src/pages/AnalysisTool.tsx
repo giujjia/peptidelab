@@ -51,6 +51,16 @@ export const AnalysisTool: React.FC = () => {
     fetchJobs();
   }, [fetchJobs]);
 
+  // Servidor sem ESM instalado mostra o botao desativado em vez de falhar no envio
+  const [esmAvailable, setEsmAvailable] = useState(true);
+  useEffect(() => {
+    let ativo = true;
+    api.get('/analysis/capabilities')
+      .then(res => { if (ativo && res?.data?.esm === false) setEsmAvailable(false); })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, []);
+
   const {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
     setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
@@ -548,6 +558,7 @@ export const AnalysisTool: React.FC = () => {
         onFilterClick={handleFilterClick}
         onFilterNumericClick={(e) => handleFilterClick(e, 'filter-numeric')}
         onEsmClick={handleEsmClick}
+        esmAvailable={esmAvailable}
         onIdMappingClick={(e) => setIdMappingAnchorEl(e.currentTarget)}
         onCompareClick={(e) => setCompareAnchorEl(e.currentTarget)}
         onCrossValClick={(e) => setCrossValAnchorEl(e.currentTarget)}

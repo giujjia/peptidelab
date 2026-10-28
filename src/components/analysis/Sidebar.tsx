@@ -27,6 +27,7 @@ interface SidebarProps {
   onFilterClick: (event: React.MouseEvent<HTMLElement>, type: 'add-genes' | 'add-protein-id' | 'remove-contaminants') => void;
   onFilterNumericClick: (event: React.MouseEvent<HTMLElement>) => void;
   onEsmClick: (event: React.MouseEvent<HTMLElement>) => void;
+  esmAvailable?: boolean;
   onIdMappingClick: (event: React.MouseEvent<HTMLElement>) => void;
   onCompareClick: (event: React.MouseEvent<HTMLElement>) => void;
   onCrossValClick: (event: React.MouseEvent<HTMLElement>) => void;
@@ -36,7 +37,8 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   filteredDataLength, totalRows, sheetData, connectedJobId, connectedJobInfo, availableJobs, connectingJob,
   filterLoading, filterDialogType, esmRunning, idMappingRunning,
-  onConnectJob, onDisconnectJob, onFilterClick, onFilterNumericClick, onEsmClick, onIdMappingClick, onCompareClick, onCrossValClick, onResetFilters
+  onConnectJob, onDisconnectJob, onFilterClick, onFilterNumericClick, onEsmClick, onIdMappingClick, onCompareClick, onCrossValClick, onResetFilters,
+  esmAvailable = true
 }) => {
   return (
     <Box sx={{
@@ -240,7 +242,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         fullWidth
         startIcon={esmRunning ? <CircularProgress size={16} /> : <PsychologyIcon sx={{ fontSize: 16 }} />}
         onClick={onEsmClick}
-        disabled={esmRunning || !sheetData}
+        disabled={!esmAvailable || esmRunning || !sheetData}
         sx={{
           textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, fontSize: '12px', borderRadius: 1.5,
           color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
@@ -248,6 +250,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         {esmRunning ? 'Running ESM-1v...' : 'ESM-1v Score'}
       </Button>
+      {!esmAvailable && (
+        <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5 }}>
+          Not available on this server
+        </Typography>
+      )}
     </Box>
   );
 };

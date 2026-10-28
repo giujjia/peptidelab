@@ -34,6 +34,10 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     });
   }, [sheetData]);
 
+  // So a pagina do pedido mais recente, e da sessao atual, chega a tela
+  const pedidoRef = useRef(0);
+  const sessaoRef = useRef('');
+
   const searchParams = () => {
     const q = searchRef.current.trim();
     return q ? { search: q } : {};
@@ -42,6 +46,8 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
   const processResponse = useCallback(async (data: any) => {
     setSearchQuery('');
     searchRef.current = '';
+    sessaoRef.current = data.session_id;
+    const pedido = ++pedidoRef.current;
     setSessionId(data.session_id);
     setSheetsInfo(data.sheets);
     const firstSheet = Object.keys(data.sheets)[0];
@@ -52,30 +58,34 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
         const res = await api.get(`/analysis/sheet/${data.session_id}/${firstSheet}`, {
           params: { page: 1, page_size: 50 }
         });
-        setSheetData(res.data);
+        if (pedido === pedidoRef.current) setSheetData(res.data);
       } catch (err: any) {
         console.error(err);
-        notify(err.response?.data?.detail || 'Failed to load sheet data', 'error');
+        if (pedido === pedidoRef.current) notify(err.response?.data?.detail || 'Failed to load sheet data', 'error');
       } finally {
-        setLoadingSheet(false);
+        if (pedido === pedidoRef.current) setLoadingSheet(false);
       }
     }
     fetchJobs();
   }, [fetchJobs, notify]);
 
   const fetchSheetData = useCallback(async (sheet: string, page: number = 1) => {
+    const pedido = ++pedidoRef.current;
+    const atual = () => pedido === pedidoRef.current && sessaoRef.current === sessionId;
     setLoadingSheet(true);
     try {
       const res = await api.get(`/analysis/sheet/${sessionId}/${sheet}`, {
         params: { page, page_size: 50, ...searchParams() }
       });
+      // Resposta de pedido anterior ou de outra sessao e descartada
+      if (!atual()) return;
       setSheetData(res.data);
       setActiveSheet(sheet);
     } catch (err: any) {
       console.error(err);
-      notify(err.response?.data?.detail || 'Failed to load sheet data', 'error');
+      if (atual()) notify(err.response?.data?.detail || 'Failed to load sheet data', 'error');
     } finally {
-      setLoadingSheet(false);
+      if (pedido === pedidoRef.current) setLoadingSheet(false);
     }
   }, [sessionId, notify]);
 
@@ -189,6 +199,9 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
 
   // Sai do workspace atual sem apagar a sessao no servidor; ela segue a retencao e pode ser reaberta
   const resetWorkspace = () => {
+    // Pedidos em andamento deixam de valer ao sair da sessao
+    pedidoRef.current += 1;
+    sessaoRef.current = '';
     setSessionId('');
     setSearchQuery('');
     setSheetsInfo({});
@@ -210,35 +223,9 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     return true;
   };
 
-  const handleNumericFilter = async (target_column: string, operator: string, threshold: number) => {
-    setLoadingSheet(true);
-    try {
-      const res = await api.post('/analysis/filter-numeric', {
-        session_id: sessionId,
-        sheet_name: activeSheet,
-        target_column,
-        operator,
-        threshold
-      });
-      setSheetData(res.data.data);
-      notify(res.data.message, 'success');
-    } catch (err: any) {
-      if (err.response?.status === 409) {
-        // Aba mudou em outra operacao; recarrega para o usuario repetir sobre a versao atual
-        notify('This sheet was changed by another operation. It has been reloaded, please apply the filter again.', 'info');
-        setLoadingSheet(false);
-        await fetchSheetData(activeSheet, 1);
-        return;
-      }
-      notify(err.response?.data?.detail || 'Failed to apply filter', 'error');
-    } finally {
-      setLoadingSheet(false);
-    }
-  };
-
   return {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading, searchQuery, setSearchQuery,
     setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
-    handleNumericFilter, processResponse
+    processResponse
   };
 }

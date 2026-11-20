@@ -8,6 +8,7 @@ interface FileDropzoneProps {
   selectedFiles: File[];
   label?: string;
   hint?: string;
+  multiple?: boolean;
 }
 
 export const FileDropzone: React.FC<FileDropzoneProps> = ({
@@ -16,6 +17,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
   selectedFiles,
   label = 'Click to select or drag and drop',
   hint,
+  multiple = true,
 }) => {
   const [dragOver, setDragOver] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -25,7 +27,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
   const handleFiles = (files: File[]) => {
     const valid = files.filter(f => allowed.some(ext => f.name.toLowerCase().endsWith(ext)));
     setRejected(files.filter(f => !valid.includes(f)).map(f => f.name));
-    if (valid.length) onFileSelect(valid);
+    if (valid.length) onFileSelect(multiple ? valid : [valid[0]]);
   };
 
   return (
@@ -55,7 +57,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
         type="file"
         hidden
         accept={accept}
-        multiple
+        multiple={multiple}
         onChange={(e) => {
           if (e.target.files?.length) handleFiles(Array.from(e.target.files));
           // Permite escolher de novo o mesmo arquivo depois de uma recusa

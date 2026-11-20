@@ -78,7 +78,7 @@ export const Processor: React.FC = () => {
 
     if (isAuthenticated) {
       try {
-        await api.post('/jobs/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post('/jobs/', formData);
         notify('Job submitted successfully', 'success');
         await fetchJobs();
       } catch (err) {
@@ -90,7 +90,6 @@ export const Processor: React.FC = () => {
     } else {
       try {
         const response = await api.post('/jobs/guest', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
           responseType: 'blob'
         });
         const blob = new Blob([response.data], { type: 'application/zip' });
@@ -240,7 +239,6 @@ export const Processor: React.FC = () => {
               <JobsList 
                 jobs={jobs}
                 analysisTasks={analysisTasks}
-                isAuthenticated={isAuthenticated}
                 currentMutationLabel={current.label}
                 onViewJob={handleViewJob}
                 onDownloadZip={handleDownloadZip}

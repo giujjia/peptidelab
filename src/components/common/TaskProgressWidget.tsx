@@ -94,7 +94,7 @@ export const TaskProgressWidget: React.FC<TaskProgressWidgetProps> = ({
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {isRunning && <ScienceIcon color="primary" sx={{ fontSize: 20, animation: 'pulse 1.5s infinite' }} />}
+          {isRunning && <ScienceIcon color="primary" sx={{ fontSize: 20 }} />}
           {isDone && <CheckCircleIcon color="success" sx={{ fontSize: 20 }} />}
           {isError && <ErrorIcon color="error" sx={{ fontSize: 20 }} />}
           {isCancelled && <CancelIcon color="warning" sx={{ fontSize: 20 }} />}

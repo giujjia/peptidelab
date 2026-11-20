@@ -5,6 +5,7 @@ import { z } from 'zod';
 export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 export const EMAIL_MAX_LENGTH = 254;
 export const PASSWORD_MIN_LENGTH = 6;
+export const PASSWORD_MAX_LENGTH = 128;
 
 // Conta pontos de codigo Unicode, como len() no Python; emoji conta 1 e nao 2
 export const passwordLength = (value: string) => [...value].length;
@@ -18,4 +19,5 @@ export const emailSchema = z
 
 export const newPasswordSchema = z
   .string()
-  .refine((v) => passwordLength(v) >= PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+  .refine((v) => passwordLength(v) >= PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+  .refine((v) => passwordLength(v) <= PASSWORD_MAX_LENGTH, `Password must be at most ${PASSWORD_MAX_LENGTH} characters`);

@@ -77,7 +77,7 @@ export const AnalysisTool: React.FC = () => {
 
   const {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
+    setSheetsInfo, setSheetData, applyServerSheet, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
     searchQuery, setSearchQuery
   } = useSheetData(notify, fetchJobs);
 
@@ -113,6 +113,9 @@ export const AnalysisTool: React.FC = () => {
   const [compareAnchorEl, setCompareAnchorEl] = useState<null | HTMLElement>(null);
   const [crossValAnchorEl, setCrossValAnchorEl] = useState<null | HTMLElement>(null);
   const [compareTask, setCompareTask] = useState<TrackedTask | null>(null);
+  const [compareStarting, setCompareStarting] = useState(false);
+  const [crossValTask, setCrossValTask] = useState<TrackedTask | null>(null);
+  const [crossValStarting, setCrossValStarting] = useState(false);
 
   // Resultado de tarefa so altera a tela se ela ainda mostra a sessao de origem
   const notifyOtherSession = (label: string, outcome: TaskOutcome) => {
@@ -171,9 +174,11 @@ export const AnalysisTool: React.FC = () => {
     }
   );
 
-  // Indicador de ID Mapping e ESM valem so para a sessao que iniciou a tarefa
+  // Indicadores de tarefas valem so para a sessao que iniciou a tarefa
   const idMappingRunning = idMappingStarting || (!!idMappingTask && idMappingTask.sessionId === sessionId);
   const esmRunning = esmStarting || (!!esmTask && esmTask.sessionId === sessionId && (esmTask.status === 'pending' || esmTask.status === 'running'));
+  const compareRunning = compareStarting || (!!compareTask && compareTask.sessionId === sessionId);
+  const crossValRunning = crossValStarting || (!!crossValTask && crossValTask.sessionId === sessionId);
 
   useTaskPolling(idMappingTask, (task, outcome, data) => {
     setIdMappingTask(prev => (prev?.taskId === task.taskId ? null : prev));
@@ -198,28 +203,37 @@ export const AnalysisTool: React.FC = () => {
     }
   });
 
-  useTaskPolling(compareTask, (task, outcome, data) => {
-    setCompareTask(prev => (prev?.taskId === task.taskId ? null : prev));
+  const handleNewTabTaskDone = (label: string, task: TrackedTask, outcome: TaskOutcome, data?: any) => {
     if (task.sessionId !== sessionId) {
-      notifyOtherSession('Comparison', outcome);
+      notifyOtherSession(label, outcome);
       return;
     }
     if (outcome === 'done') {
-      notify(`Comparison complete! New tab: "${data.nova_aba}"`, 'success');
+      notify(`${label} complete! New tab: "${data.nova_aba}"`, 'success');
       if (data.nova_aba) {
         setSheetsInfo((prev: any) => ({
           ...prev,
           [data.nova_aba]: { row_count: 0, columns: [] }
         }));
-        fetchSheetData(data.nova_aba, 1);
+        fetchSheetData(data.nova_aba, 1, true);
       }
     } else if (outcome === 'error') {
-      notify(`Compare Error: ${data?.error}`, 'error');
+      notify(`${label} Error: ${data?.error || 'Execution failed'}`, 'error');
     } else if (outcome === 'cancelled') {
-      notify('Comparison cancelled', 'info');
+      notify(`${label} cancelled`, 'info');
     } else {
-      notify('Comparison polling stopped due to network errors', 'error');
+      notify(`${label} polling stopped due to network errors`, 'error');
     }
+  };
+
+  useTaskPolling(compareTask, (task, outcome, data) => {
+    setCompareTask(prev => (prev?.taskId === task.taskId ? null : prev));
+    handleNewTabTaskDone('Comparison', task, outcome, data);
+  });
+
+  useTaskPolling(crossValTask, (task, outcome, data) => {
+    setCrossValTask(prev => (prev?.taskId === task.taskId ? null : prev));
+    handleNewTabTaskDone('Cross-Validation', task, outcome, data);
   });
 
   const handleConnectJob = async (jobId: string): Promise<boolean> => {
@@ -319,6 +333,7 @@ export const AnalysisTool: React.FC = () => {
       setEsmTrackedTask(null);
       setIdMappingTask(null);
       setCompareTask(null);
+      setCrossValTask(null);
     }
   }, [identity, resetWorkspace]);
 
@@ -350,7 +365,7 @@ export const AnalysisTool: React.FC = () => {
       const res = await api.post(url, body);
       if (!sameSession()) return;
       if (res?.data?.data) {
-        setSheetData(res.data.data);
+        applyServerSheet(res.data.data);
         notify(res.data.message, 'success');
       }
     } catch (err: any) {
@@ -410,7 +425,7 @@ export const AnalysisTool: React.FC = () => {
     if (filterDialogType === 'add-genes') {
       await applyEdit('/analysis/add-genes', { ...base, target_column: params.target_column }, 'Failed to add genes');
     } else if (filterDialogType === 'add-protein-id') {
-      const targetCol = params.target_sequence_column || params.target_column;
+      const targetCol = params.target_sequence_column;
       await applyEdit('/analysis/add-protein-id', {
         ...base, target_sheet: activeSheet, target_sequence_column: targetCol, target_column: targetCol,
       }, 'Failed to add protein IDs');
@@ -503,7 +518,9 @@ export const AnalysisTool: React.FC = () => {
   };
 
   const handleCompareConfirm = async (params: { sheet_a: string; sheet_b: string; col_key: string }) => {
+    if (compareStarting) return;
     setCompareAnchorEl(null);
+    setCompareStarting(true);
     try {
       const origin = sessionId;
       const res = await api.post('/analysis/run-compare', {
@@ -514,6 +531,8 @@ export const AnalysisTool: React.FC = () => {
       notify('Comparing datasets in background...', 'info');
     } catch (err: any) {
       notify(errorMessage(err, 'Failed to start comparison'), 'error');
+    } finally {
+      setCompareStarting(false);
     }
   };
 
@@ -527,17 +546,21 @@ export const AnalysisTool: React.FC = () => {
     higher_is_better: boolean;
     classification_threshold: number;
   }) => {
+    if (crossValStarting) return;
     setCrossValAnchorEl(null);
+    setCrossValStarting(true);
     try {
       const origin = sessionId;
       const res = await api.post('/analysis/run-crossval', {
         session_id: origin,
         ...params,
       });
-      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${encodeURIComponent(res.data.task_id)}` });
+      setCrossValTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${encodeURIComponent(res.data.task_id)}` });
       notify('Cross-validation started in background...', 'info');
     } catch (err: any) {
       notify(errorMessage(err, 'Failed to start cross-validation'), 'error');
+    } finally {
+      setCrossValStarting(false);
     }
   };
 
@@ -618,6 +641,8 @@ export const AnalysisTool: React.FC = () => {
         filterDialogType={filterDialogType}
         esmRunning={esmRunning}
         idMappingRunning={idMappingRunning}
+        compareRunning={compareRunning}
+        crossValRunning={crossValRunning}
         onConnectJob={handleConnectJob}
         onDisconnectJob={handleDisconnectJob}
         onFilterClick={handleFilterClick}

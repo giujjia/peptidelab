@@ -128,6 +128,7 @@ export const JobForm: React.FC<JobFormProps> = ({
             onFileSelect={(files) => setSelectedFile(files.length > 0 ? files[0] : null)} 
             selectedFiles={selectedFile ? [selectedFile] : []} 
             accept=".txt,.tsv,.csv"
+            multiple={false}
             hint="Plain text file (.txt, .tsv or .csv), one mutation per line in the format shown in Text Input"
           />
           {isFileLimitExceeded && selectedFile && (

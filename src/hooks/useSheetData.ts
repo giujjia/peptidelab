@@ -81,10 +81,21 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
     return true;
   }, [fetchJobs, notify]);
 
-  const fetchSheetData = useCallback(async (sheet: string, page: number = 1) => {
+  const applyServerSheet = useCallback((data: SheetData) => {
+    setSearchQuery('');
+    searchRef.current = '';
+    lastLoadedSearchedRef.current = false;
+    setSheetData(data);
+  }, []);
+
+  const fetchSheetData = useCallback(async (sheet: string, page: number = 1, ignoreSearch: boolean = false) => {
     const pedido = ++pedidoRef.current;
     const atual = () => pedido === pedidoRef.current && sessaoRef.current === sessionId;
-    const params = searchParams();
+    if (ignoreSearch) {
+      setSearchQuery('');
+      searchRef.current = '';
+    }
+    const params = ignoreSearch ? {} : searchParams();
     const wasSearching = Boolean(params.search);
     setLoadingSheet(true);
     try {
@@ -112,9 +123,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       formData.append('files', file);
     });
     try {
-      const res = await api.post('/analysis/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post('/analysis/upload', formData);
       await processResponse(res.data, seq);
     } catch (err: any) {
       if (seq === openSeqRef.current) notify(errorMessage(err, 'Upload failed'), 'error');
@@ -135,9 +144,7 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       formData.append('files', file);
     });
     try {
-      const res = await api.post('/analysis/import-files', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post('/analysis/import-files', formData);
       if (!sameSession()) return;
       setSheetsInfo(res.data.sheets);
       const firstNew = res.data.new_sheets?.[0];
@@ -253,6 +260,6 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
 
   return {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading, searchQuery, setSearchQuery,
-    setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
+    setSheetsInfo, setSheetData, applyServerSheet, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
   };
 }

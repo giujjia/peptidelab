@@ -34,6 +34,8 @@ interface SidebarProps {
   filterDialogType: string;
   esmRunning: boolean;
   idMappingRunning: boolean;
+  compareRunning?: boolean;
+  crossValRunning?: boolean;
   onConnectJob: (jobId: string) => void;
   onDisconnectJob: () => void;
   onFilterClick: (event: React.MouseEvent<HTMLElement>, type: 'add-genes' | 'add-protein-id' | 'remove-contaminants') => void;
@@ -48,7 +50,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   filteredDataLength, totalRows, sheetData, connectedJobId, connectedJobInfo, availableJobs, connectingJob,
-  filterLoading, filterDialogType, esmRunning, idMappingRunning,
+  filterLoading, filterDialogType, esmRunning, idMappingRunning, compareRunning = false, crossValRunning = false,
   onConnectJob, onDisconnectJob, onFilterClick, onFilterNumericClick, onEsmClick, onIdMappingClick, onCompareClick, onCrossValClick, onResetFilters,
   esmAvailable = true
 }) => {
@@ -205,24 +207,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         variant="outlined"
         size="small"
         fullWidth
-        startIcon={<CompareArrowsIcon sx={{ fontSize: 16 }} />}
+        startIcon={compareRunning ? <CircularProgress size={16} /> : <CompareArrowsIcon sx={{ fontSize: 16 }} />}
         onClick={onCompareClick}
-        disabled={!sheetData}
+        disabled={compareRunning || !sheetData}
         sx={ACTION_BUTTON_SX}
       >
-        Compare Datasets
+        {compareRunning ? 'Comparing...' : 'Compare Datasets'}
       </Button>
 
       <Button
         variant="outlined"
         size="small"
         fullWidth
-        startIcon={<ScienceIcon sx={{ fontSize: 16 }} />}
+        startIcon={crossValRunning ? <CircularProgress size={16} /> : <ScienceIcon sx={{ fontSize: 16 }} />}
         onClick={onCrossValClick}
-        disabled={!sheetData}
+        disabled={crossValRunning || !sheetData}
         sx={ACTION_BUTTON_SX}
       >
-        Cross-Validate Rounds
+        {crossValRunning ? 'Cross-Validating...' : 'Cross-Validate Rounds'}
       </Button>
 
       <Divider sx={{ mb: 1.5 }} />

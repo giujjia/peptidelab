@@ -4,7 +4,7 @@ import { Box, Paper, Typography, TextField, Button, Alert } from '@mui/material'
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { errorMessage } from '../services/errors';
-import { passwordLength, PASSWORD_MIN_LENGTH } from '../services/accountRules';
+import { passwordLength, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from '../services/accountRules';
 
 // Destino do link enviado por e-mail na recuperacao de senha
 export const ResetPassword: React.FC = () => {
@@ -27,9 +27,9 @@ export const ResetPassword: React.FC = () => {
   const [error, setError] = useState('');
   const { clearLocalSession } = useAuth();
 
-  const shortPassword = password !== '' && passwordLength(password) < PASSWORD_MIN_LENGTH;
+  const invalidPassword = password !== '' && (passwordLength(password) < PASSWORD_MIN_LENGTH || passwordLength(password) > PASSWORD_MAX_LENGTH);
   const mismatch = confirm !== '' && confirm !== password;
-  const ready = !!token && passwordLength(password) >= PASSWORD_MIN_LENGTH && password === confirm && !loading;
+  const ready = !!token && passwordLength(password) >= PASSWORD_MIN_LENGTH && passwordLength(password) <= PASSWORD_MAX_LENGTH && password === confirm && !loading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +67,7 @@ export const ResetPassword: React.FC = () => {
             <TextField
               fullWidth type="password" label="New Password" margin="normal" size="small"
               value={password} onChange={(e) => setPassword(e.target.value)}
-              error={shortPassword} helperText={`At least ${PASSWORD_MIN_LENGTH} characters`}
+              error={invalidPassword} helperText={`${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters`}
             />
             <TextField
               fullWidth type="password" label="Confirm New Password" margin="normal" size="small"

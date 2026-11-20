@@ -26,6 +26,8 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
     if (anchorEl) {
       setTargetColumn('');
       setKeyword('contaminant');
+      setOperator('<');
+      setThreshold('0.01');
     }
   }, [anchorEl, type]);
 
@@ -43,7 +45,7 @@ export const FilterPopover: React.FC<FilterPopoverProps> = ({
 
   const isReady = targetColumn !== '' && 
     (type === 'remove-contaminants' ? keyword !== '' : true) &&
-    (type === 'filter-numeric' ? threshold !== '' && !isNaN(Number(threshold)) : true);
+    (type === 'filter-numeric' ? threshold.trim() !== '' && Number.isFinite(Number(threshold)) : true);
 
   const open = Boolean(anchorEl);
 

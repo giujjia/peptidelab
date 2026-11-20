@@ -69,7 +69,7 @@ describe('exclusao de Job (V31)', () => {
 
   const renderList = (onDeleteJob: (id: string) => void) => render(
     <MemoryRouter>
-      <JobsList jobs={[job]} isAuthenticated currentMutationLabel="Missense"
+      <JobsList jobs={[job]} currentMutationLabel="Missense"
         onViewJob={vi.fn()} onDownloadZip={vi.fn()} onDeleteJob={onDeleteJob} />
     </MemoryRouter>
   );
@@ -133,7 +133,6 @@ describe('ESM-1v no JobsDrawer e em Recent Analysis Jobs', () => {
         <JobsList
           jobs={[]}
           analysisTasks={[esmTask]}
-          isAuthenticated
           currentMutationLabel="Missense"
           onViewJob={vi.fn()}
           onDownloadZip={vi.fn()}

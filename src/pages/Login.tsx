@@ -7,18 +7,21 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { errorMessage } from '../services/errors';
-import { emailSchema, normalizeEmail, passwordLength, PASSWORD_MIN_LENGTH, EMAIL_PATTERN } from '../services/accountRules';
+import { emailSchema, normalizeEmail, passwordLength, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, EMAIL_MAX_LENGTH, EMAIL_PATTERN } from '../services/accountRules';
 
 const loginSchema = z.object({
   email: emailSchema,
-  password: z.string().min(1, 'Password is required'),
+  password: z
+    .string()
+    .min(1, 'Password is required')
+    .refine((v) => passwordLength(v) <= PASSWORD_MAX_LENGTH, `Password must be at most ${PASSWORD_MAX_LENGTH} characters`),
 });
 
 type LoginFormInputs = z.infer<typeof loginSchema>;
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, clearLocalSession } = useAuth();
   const [error, setError] = useState('');
 
   // Forgot password modal state
@@ -96,6 +99,7 @@ export const Login: React.FC = () => {
     setForgotMsg(null);
     try {
       await api.post('/auth/reset-password', { token: resetToken, new_password: newPassword });
+      clearLocalSession();
       if (flow !== forgotFlowRef.current) return;
       setForgotMsg({ text: 'Password reset successfully! You can now log in.', type: 'success' });
       clearCloseTimer();
@@ -231,8 +235,8 @@ export const Login: React.FC = () => {
                 size="small"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                error={newPassword !== '' && passwordLength(newPassword) < PASSWORD_MIN_LENGTH}
-                helperText={`At least ${PASSWORD_MIN_LENGTH} characters`}
+                error={newPassword !== '' && (passwordLength(newPassword) < PASSWORD_MIN_LENGTH || passwordLength(newPassword) > PASSWORD_MAX_LENGTH)}
+                helperText={`${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters`}
               />
             </>
           )}
@@ -245,7 +249,7 @@ export const Login: React.FC = () => {
             <Button
               variant="contained"
               onClick={handleRequestReset}
-              disabled={forgotLoading || !EMAIL_PATTERN.test(normalizeEmail(forgotEmail))}
+              disabled={forgotLoading || normalizeEmail(forgotEmail).length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(normalizeEmail(forgotEmail))}
               sx={{ textTransform: 'none' }}
             >
               {forgotLoading ? 'Requesting...' : 'Next'}
@@ -254,7 +258,7 @@ export const Login: React.FC = () => {
             <Button
               variant="contained"
               onClick={handleConfirmReset}
-              disabled={forgotLoading || !resetToken || passwordLength(newPassword) < PASSWORD_MIN_LENGTH}
+              disabled={forgotLoading || !resetToken || passwordLength(newPassword) < PASSWORD_MIN_LENGTH || passwordLength(newPassword) > PASSWORD_MAX_LENGTH}
               sx={{ textTransform: 'none' }}
             >
               {forgotLoading ? 'Updating...' : 'Set New Password'}

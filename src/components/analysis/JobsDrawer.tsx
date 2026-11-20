@@ -365,14 +365,16 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                     <Box sx={{ my: 1.5 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="caption" color="text.secondary">
-                          Progress
+                          {t.status === 'pending' ? 'Queued' : 'Progress'}
                         </Typography>
-                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                          {t.progress} / {t.total} ({t.total > 0 ? ((t.progress / t.total) * 100).toFixed(0) : 0}%)
-                        </Typography>
+                        {t.total > 0 && (
+                          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                            {t.progress} / {t.total} ({((t.progress / t.total) * 100).toFixed(0)}%)
+                          </Typography>
+                        )}
                       </Box>
                       <LinearProgress
-                        variant="determinate"
+                        variant={t.status === 'pending' || t.total <= 0 ? 'indeterminate' : 'determinate'}
                         value={t.total > 0 ? (t.progress / t.total) * 100 : 0}
                         sx={{ height: 6, borderRadius: 3 }}
                       />

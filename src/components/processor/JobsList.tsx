@@ -12,7 +12,6 @@ import { getTaskTypeLabel, getTaskStatusMeta } from '../../utils/tasks';
 interface JobsListProps {
   jobs: Job[];
   analysisTasks?: AsyncTaskItem[];
-  isAuthenticated?: boolean;
   currentMutationLabel: string;
   onViewJob: (jobId: string) => void;
   onDownloadZip: (jobId: string) => Promise<void> | void;
@@ -190,6 +189,11 @@ export const JobsList: React.FC<JobsListProps> = ({
                       <Typography variant="caption" color="text.secondary">
                         {new Date(job.created_at).toLocaleString()} • {formatSize(job.size_bytes)}
                       </Typography>
+                      {job.status === 'FAILED' && job.error_message && (
+                        <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.5 }}>
+                          {job.error_message}
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', alignItems: 'center' }}>

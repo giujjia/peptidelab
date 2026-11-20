@@ -16,6 +16,8 @@ vi.mock('../src/services/api', () => ({ api: apiMock, setAuthToken: vi.fn(), get
 
 import { AnalysisTool } from '../src/pages/AnalysisTool';
 import { ResetPassword } from '../src/pages/ResetPassword';
+import { JobsList } from '../src/components/processor/JobsList';
+import { newPasswordSchema, PASSWORD_MAX_LENGTH } from '../src/services/accountRules';
 
 beforeEach(() => {
   notify.mockReset();
@@ -47,5 +49,34 @@ describe('C23 frontend security fixes', () => {
     );
     await waitFor(() => expect(window.location.search).toBe(''));
     expect(screen.getByText('Set a new password')).toBeTruthy();
+  });
+
+  it('displays error_message for FAILED processor jobs in JobsList', () => {
+    const failedJob = {
+      id: 'j-fail',
+      user_id: 'u1',
+      mutation_type: 'missense',
+      input_mode: 'text',
+      input_text: null,
+      file_url: null,
+      output_fasta_path: null,
+      output_dbf_path: null,
+      output_dbpepmutref_path: null,
+      error_message: 'Reference FASTA unavailable',
+      status: 'FAILED' as const,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    render(
+      <MemoryRouter>
+        <JobsList jobs={[failedJob]} currentMutationLabel="Missense" onViewJob={vi.fn()} onDownloadZip={vi.fn()} />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Reference FASTA unavailable')).toBeTruthy();
+  });
+
+  it('rejects passwords longer than PASSWORD_MAX_LENGTH', () => {
+    expect(newPasswordSchema.safeParse('a'.repeat(PASSWORD_MAX_LENGTH)).success).toBe(true);
+    expect(newPasswordSchema.safeParse('a'.repeat(PASSWORD_MAX_LENGTH + 1)).success).toBe(false);
   });
 });

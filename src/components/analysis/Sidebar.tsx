@@ -10,6 +10,18 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { AvailableJob, SheetData } from '../../types';
 
+const ACTION_BUTTON_SX = {
+  textTransform: 'none',
+  justifyContent: 'flex-start',
+  fontWeight: 600,
+  mb: 1,
+  fontSize: '12px',
+  borderRadius: 1.5,
+  color: 'text.primary',
+  borderColor: 'divider',
+  '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' },
+};
+
 interface SidebarProps {
   filteredDataLength: number;
   totalRows?: number;
@@ -115,10 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         startIcon={filterLoading && filterDialogType === 'add-genes' ? <CircularProgress size={16} /> : <ScienceIcon sx={{ fontSize: 16 }} />}
         onClick={(e) => onFilterClick(e, 'add-genes')}
         disabled={filterLoading || !sheetData}
-        sx={{ 
-          textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5,
-          color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-        }}
+        sx={ACTION_BUTTON_SX}
       >
         {filterLoading && filterDialogType === 'add-genes' ? 'Processing...' : 'Add Genes'}
       </Button>
@@ -131,10 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             startIcon={filterLoading && filterDialogType === 'add-protein-id' ? <CircularProgress size={16} /> : <FingerprintIcon sx={{ fontSize: 16 }} />}
             onClick={(e) => onFilterClick(e, 'add-protein-id')}
             disabled={filterLoading || !sheetData || !connectedJobId}
-            sx={{ 
-              textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5,
-              color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-            }}
+            sx={ACTION_BUTTON_SX}
           >
             {filterLoading && filterDialogType === 'add-protein-id' ? 'Processing...' : 'Add Protein ID'}
           </Button>
@@ -148,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={(e) => onFilterClick(e, 'remove-contaminants')}
         disabled={filterLoading || !sheetData}
         color="error"
-        sx={{ 
+        sx={{
           textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5
         }}
       >
@@ -162,10 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         startIcon={filterLoading && filterDialogType === 'filter-numeric' ? <CircularProgress size={16} /> : <ScienceIcon sx={{ fontSize: 16 }} />}
         onClick={(e) => onFilterNumericClick(e)}
         disabled={filterLoading || !sheetData}
-        sx={{ 
-          textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5,
-          color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-        }}
+        sx={ACTION_BUTTON_SX}
       >
         {filterLoading && filterDialogType === 'filter-numeric' ? 'Processing...' : 'Filter Numeric'}
       </Button>
@@ -193,10 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         startIcon={idMappingRunning ? <CircularProgress size={16} /> : <SwapHorizIcon sx={{ fontSize: 16 }} />}
         onClick={onIdMappingClick}
         disabled={idMappingRunning || !sheetData}
-        sx={{
-          textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5,
-          color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-        }}
+        sx={ACTION_BUTTON_SX}
       >
         {idMappingRunning ? 'Mapping IDs...' : 'Enrich IDs'}
       </Button>
@@ -208,10 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         startIcon={<CompareArrowsIcon sx={{ fontSize: 16 }} />}
         onClick={onCompareClick}
         disabled={!sheetData}
-        sx={{
-          textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5,
-          color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-        }}
+        sx={ACTION_BUTTON_SX}
       >
         Compare Datasets
       </Button>
@@ -223,10 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         startIcon={<ScienceIcon sx={{ fontSize: 16 }} />}
         onClick={onCrossValClick}
         disabled={!sheetData}
-        sx={{
-          textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, mb: 1, fontSize: '12px', borderRadius: 1.5,
-          color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-        }}
+        sx={ACTION_BUTTON_SX}
       >
         Cross-Validate Rounds
       </Button>
@@ -245,10 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         startIcon={esmRunning ? <CircularProgress size={16} /> : <PsychologyIcon sx={{ fontSize: 16 }} />}
         onClick={onEsmClick}
         disabled={!esmAvailable || esmRunning || !sheetData}
-        sx={{
-          textTransform: 'none', justifyContent: 'flex-start', fontWeight: 600, fontSize: '12px', borderRadius: 1.5,
-          color: 'text.primary', borderColor: 'divider', '&:hover': { bgcolor: 'primary.light', borderColor: 'primary.main' }
-        }}
+        sx={{ ...ACTION_BUTTON_SX, mb: 0 }}
       >
         {esmRunning ? 'Running ESM-1v...' : 'ESM-1v Score'}
       </Button>

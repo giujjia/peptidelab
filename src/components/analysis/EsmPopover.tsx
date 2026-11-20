@@ -126,57 +126,21 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
       )}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <FormControl fullWidth size="small" disabled={isDisabled}>
-          <InputLabel>Sequence Column</InputLabel>
-          <Select
-            value={colunaSeq}
-            label="Sequence Column"
-            onChange={(e) => setColunaSeq(e.target.value)}
-          >
-            {columns.map(col => (
-              <MenuItem key={col} value={col}>{col}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl fullWidth size="small" disabled={isDisabled}>
-          <InputLabel>Position Column</InputLabel>
-          <Select
-            value={colunaPos}
-            label="Position Column"
-            onChange={(e) => setColunaPos(e.target.value)}
-          >
-            {columns.map(col => (
-              <MenuItem key={col} value={col}>{col}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl fullWidth size="small" disabled={isDisabled}>
-          <InputLabel>Original AA Column</InputLabel>
-          <Select
-            value={colunaOld}
-            label="Original AA Column"
-            onChange={(e) => setColunaOld(e.target.value)}
-          >
-            {columns.map(col => (
-              <MenuItem key={col} value={col}>{col}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl fullWidth size="small" disabled={isDisabled}>
-          <InputLabel>Mutant AA Column</InputLabel>
-          <Select
-            value={colunaNew}
-            label="Mutant AA Column"
-            onChange={(e) => setColunaNew(e.target.value)}
-          >
-            {columns.map(col => (
-              <MenuItem key={col} value={col}>{col}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {[
+          { label: 'Sequence Column', value: colunaSeq, setter: setColunaSeq },
+          { label: 'Position Column', value: colunaPos, setter: setColunaPos },
+          { label: 'Original AA Column', value: colunaOld, setter: setColunaOld },
+          { label: 'Mutant AA Column', value: colunaNew, setter: setColunaNew },
+        ].map(({ label, value, setter }) => (
+          <FormControl key={label} fullWidth size="small" disabled={isDisabled}>
+            <InputLabel>{label}</InputLabel>
+            <Select value={value} label={label} onChange={(e) => setter(e.target.value)}>
+              {columns.map(col => (
+                <MenuItem key={col} value={col}>{col}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ))}
 
         {isAuthenticated && !isDisabled && (
           <Box sx={{ mt: -0.5, mb: -0.5 }}>

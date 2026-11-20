@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Drawer,
   Box,
@@ -22,37 +22,24 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import LaunchIcon from '@mui/icons-material/Launch';
+import DownloadIcon from '@mui/icons-material/Download';
 import { api } from '../../services/api';
+import { errorMessage } from '../../services/errors';
 import { useAuth } from '../../contexts/AuthContext';
-
-export interface ProcessorJob {
-  id: string;
-  mutation_type: string;
-  created_at: string;
-  has_dbpepmutref: boolean;
-}
-
-export interface AsyncTaskItem {
-  id: string;
-  task_type: string;
-  session_id: string;
-  status: string;
-  progress: number;
-  total: number;
-  error?: string | null;
-  created_at?: string | null;
-  finished_at?: string | null;
-}
+import { useNotification } from '../../contexts/NotificationContext';
+import { downloadSessionWorkbook } from '../../utils/download';
+import { getTaskTypeLabel, getTaskStatusMeta } from '../../utils/tasks';
+import { AsyncTaskItem, AvailableJob } from '../../types';
 
 interface JobsDrawerProps {
   open: boolean;
   onClose: () => void;
-  onLoadJobAsSession: (jobId: string) => Promise<void>;
-  onConnectJobToSession?: (jobId: string) => Promise<void>;
+  onLoadJobAsSession: (jobId: string) => Promise<boolean | void>;
+  onConnectJobToSession?: (jobId: string) => Promise<boolean | void>;
   currentSessionId?: string;
   connectedJobId?: string;
   onRefreshActiveSheet?: () => void;
-  onOpenSession?: (sessionId: string) => Promise<void>;
+  onOpenSession?: (sessionId: string) => Promise<boolean | void>;
 }
 
 export const JobsDrawer: React.FC<JobsDrawerProps> = ({
@@ -66,128 +53,102 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
   onOpenSession,
 }) => {
   const { user } = useAuth();
+  const { notify } = useNotification();
   const [tabIndex, setTabIndex] = useState<number>(0);
-  const [jobs, setJobs] = useState<ProcessorJob[]>([]);
+  const [jobs, setJobs] = useState<AvailableJob[]>([]);
   const [tasks, setTasks] = useState<AsyncTaskItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [loadingActions, setLoadingActions] = useState<Set<string>>(() => new Set());
+  const fetchGenRef = useRef(0);
+
+  const setActionBusy = (key: string, busy: boolean) => {
+    setLoadingActions((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      fetchGenRef.current += 1;
+      setJobs([]);
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
+    const gen = ++fetchGenRef.current;
     setLoading(true);
     try {
       const [jobsRes, tasksRes] = await Promise.all([
-        api.get('/analysis/jobs').catch(() => ({ data: [] })),
-        api.get('/analysis/tasks').catch(() => ({ data: [] })),
+        api.get('/analysis/jobs'),
+        api.get('/analysis/tasks'),
       ]);
-      setJobs(jobsRes.data || []);
-      setTasks(tasksRes.data || []);
-    } catch {
-      // Ignora erro silenciosamente
+      if (gen !== fetchGenRef.current) return;
+      setJobs(Array.isArray(jobsRes.data) ? jobsRes.data : []);
+      setTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
+    } catch (err: any) {
+      if (gen === fetchGenRef.current) {
+        notify(errorMessage(err, 'Failed to load history'), 'error');
+      }
     } finally {
-      setLoading(false);
+      if (gen === fetchGenRef.current) setLoading(false);
     }
-  }, [user]);
+  }, [user, notify]);
 
   useEffect(() => {
+    if (!user) {
+      fetchGenRef.current += 1;
+      setJobs([]);
+      setTasks([]);
+      return;
+    }
     if (open) {
       fetchData();
     }
-  }, [open, fetchData]);
+  }, [open, user, fetchData]);
 
   const handleLoadJob = async (jobId: string) => {
-    setActionLoadingId(jobId);
+    setActionBusy(jobId, true);
     try {
-      await onLoadJobAsSession(jobId);
-      onClose();
+      const ok = await onLoadJobAsSession(jobId);
+      if (ok !== false) onClose();
     } finally {
-      setActionLoadingId(null);
+      setActionBusy(jobId, false);
     }
   };
 
   const handleConnectJob = async (jobId: string) => {
     if (!onConnectJobToSession) return;
-    setActionLoadingId(jobId);
+    setActionBusy(jobId, true);
     try {
-      await onConnectJobToSession(jobId);
-      onClose();
+      const ok = await onConnectJobToSession(jobId);
+      if (ok !== false) onClose();
     } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const getTaskTypeLabel = (type: string) => {
-    switch (type) {
-      case 'esm':
-        return 'ESM-1v Scoring';
-      case 'id_mapping':
-        return 'UniProt ID Mapping';
-      case 'compare':
-        return 'Dataset Intersection';
-      case 'crossval':
-        return 'Cross-Validation';
-      default:
-        return type.toUpperCase();
+      setActionBusy(jobId, false);
     }
   };
 
   const getStatusChip = (status: string) => {
-    switch (status) {
-      case 'done':
-        return (
-          <Chip
-            size="small"
-            icon={<CheckCircleIcon sx={{ fontSize: '14px !important' }} />}
-            label="Completed"
-            color="success"
-            variant="outlined"
-            sx={{ fontWeight: 600, height: 22 }}
-          />
-        );
-      case 'running':
-        return (
-          <Chip
-            size="small"
-            icon={<HourglassEmptyIcon sx={{ fontSize: '14px !important' }} />}
-            label="Running"
-            color="info"
-            variant="outlined"
-            sx={{ fontWeight: 600, height: 22 }}
-          />
-        );
-      case 'pending':
-        return (
-          <Chip
-            size="small"
-            label="Pending"
-            color="warning"
-            variant="outlined"
-            sx={{ fontWeight: 600, height: 22 }}
-          />
-        );
-      case 'error':
-        return (
-          <Chip
-            size="small"
-            icon={<ErrorIcon sx={{ fontSize: '14px !important' }} />}
-            label="Error"
-            color="error"
-            variant="outlined"
-            sx={{ fontWeight: 600, height: 22 }}
-          />
-        );
-      case 'cancelled':
-        return (
-          <Chip
-            size="small"
-            label="Cancelled"
-            variant="outlined"
-            sx={{ fontWeight: 600, height: 22 }}
-          />
-        );
-      default:
-        return <Chip size="small" label={status} variant="outlined" sx={{ height: 22 }} />;
-    }
+    const meta = getTaskStatusMeta(status);
+    const icon = status === 'done'
+      ? <CheckCircleIcon sx={{ fontSize: '14px !important' }} />
+      : status === 'error'
+        ? <ErrorIcon sx={{ fontSize: '14px !important' }} />
+        : status === 'running'
+          ? <HourglassEmptyIcon sx={{ fontSize: '14px !important' }} />
+          : undefined;
+    return (
+      <Chip
+        size="small"
+        icon={icon}
+        label={meta.label}
+        color={meta.color}
+        variant="outlined"
+        sx={{ fontWeight: 600, height: 22 }}
+      />
+    );
   };
 
   const formatDate = (dateStr?: string | null) => {
@@ -295,7 +256,7 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
             <List disablePadding>
               {jobs.map((j) => {
                 const isConnected = connectedJobId === j.id;
-                const isActing = actionLoadingId === j.id;
+                const isActing = loadingActions.has(j.id);
                 return (
                   <Paper
                     key={j.id}
@@ -333,9 +294,15 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                       </Typography>
                     </Box>
 
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: j.has_dbpepmutref ? 2 : 0.5 }}>
                       Job ID: {j.id.slice(0, 8)}...
                     </Typography>
+                    {/* Frameshift nao gera tabela de relacao; abrir ou conectar sempre falharia */}
+                    {!j.has_dbpepmutref && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                        This mutation type has no peptide relation table to open in the workspace. Download its results in Peptide Processor.
+                      </Typography>
+                    )}
 
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <Button
@@ -343,7 +310,7 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                         variant="contained"
                         startIcon={isActing ? <CircularProgress size={14} color="inherit" /> : <LaunchIcon sx={{ fontSize: 15 }} />}
                         onClick={() => handleLoadJob(j.id)}
-                        disabled={isActing}
+                        disabled={isActing || !j.has_dbpepmutref}
                         sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', flex: 1 }}
                       >
                         Open in Workspace
@@ -353,7 +320,7 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                           size="small"
                           variant="outlined"
                           onClick={() => handleConnectJob(j.id)}
-                          disabled={isActing}
+                          disabled={isActing || !j.has_dbpepmutref}
                           sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
                         >
                           Connect
@@ -418,42 +385,67 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                     </Typography>
                   )}
 
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, gap: 1, flexWrap: 'wrap' }}>
                     <Typography variant="caption" color="text.secondary">
                       {formatDate(t.created_at)}
                     </Typography>
 
-                    {onOpenSession && currentSessionId !== t.session_id && (
-                      <Button
-                        size="small"
-                        variant="text"
-                        color="primary"
-                        disabled={actionLoadingId === t.id}
-                        onClick={async () => {
-                          setActionLoadingId(t.id);
-                          try {
-                            await onOpenSession(t.session_id);
-                            onClose();
-                          } finally {
-                            setActionLoadingId(null);
-                          }
-                        }}
-                        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
-                      >
-                        Open Session
-                      </Button>
-                    )}
-                    {t.status === 'done' && onRefreshActiveSheet && currentSessionId === t.session_id && (
-                      <Button
-                        size="small"
-                        variant="text"
-                        color="primary"
-                        onClick={onRefreshActiveSheet}
-                        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
-                      >
-                        Reload Active Sheet
-                      </Button>
-                    )}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      {t.status === 'done' && (
+                        <Button
+                          size="small"
+                          variant="text"
+                          color="primary"
+                          startIcon={<DownloadIcon sx={{ fontSize: '15px !important' }} />}
+                          disabled={loadingActions.has(`${t.id}:download`)}
+                          onClick={async () => {
+                            const key = `${t.id}:download`;
+                            setActionBusy(key, true);
+                            try {
+                              await downloadSessionWorkbook(t.session_id);
+                            } catch (err: any) {
+                              notify(errorMessage(err, 'Session expired or file unavailable'), 'error');
+                            } finally {
+                              setActionBusy(key, false);
+                            }
+                          }}
+                          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                        >
+                          Download (.xlsx)
+                        </Button>
+                      )}
+                      {onOpenSession && currentSessionId !== t.session_id && (
+                        <Button
+                          size="small"
+                          variant="text"
+                          color="primary"
+                          disabled={loadingActions.has(t.id)}
+                          onClick={async () => {
+                            setActionBusy(t.id, true);
+                            try {
+                              const ok = await onOpenSession(t.session_id);
+                              if (ok !== false) onClose();
+                            } finally {
+                              setActionBusy(t.id, false);
+                            }
+                          }}
+                          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                        >
+                          Open Session
+                        </Button>
+                      )}
+                      {t.status === 'done' && onRefreshActiveSheet && currentSessionId === t.session_id && (
+                        <Button
+                          size="small"
+                          variant="text"
+                          color="primary"
+                          onClick={onRefreshActiveSheet}
+                          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                        >
+                          Reload Active Sheet
+                        </Button>
+                      )}
+                    </Box>
                   </Box>
                 </Paper>
               ))}

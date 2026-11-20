@@ -49,3 +49,15 @@ export interface AvailableJob {
   created_at: string;
   has_dbpepmutref: boolean;
 }
+
+export interface AsyncTaskItem {
+  id: string;
+  task_type: string;
+  session_id: string;
+  status: string;
+  progress: number;
+  total: number;
+  error?: string | null;
+  created_at?: string | null;
+  finished_at?: string | null;
+}

@@ -118,19 +118,31 @@ export const About: React.FC = () => {
                     Ph.D. in Bioinformatics and M.Sc. in Computer Science. Professor and researcher at the Federal University of Rondônia (UNIR).
                   </Typography>
 
-                  <Button
-                    variant="text"
-                    size="small"
-                    color="primary"
-                    href="http://lattes.cnpq.br/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    startIcon={<SchoolIcon />}
-                    endIcon={<OpenInNewIcon fontSize="small" />}
-                    sx={{ width: 'fit-content', px: 0 }}
-                  >
-                    Lattes Curriculum
-                  </Button>
+                  <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+                    <Button
+                      variant="text"
+                      size="small"
+                      color="primary"
+                      href="http://lattes.cnpq.br/6545545471833974"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      startIcon={<SchoolIcon />}
+                      endIcon={<OpenInNewIcon fontSize="small" />}
+                      sx={{ width: 'fit-content', px: 0 }}
+                    >
+                      Lattes Curriculum
+                    </Button>
+                    <Button
+                      variant="text"
+                      size="small"
+                      color="primary"
+                      href="mailto:lucas.marques@unir.br"
+                      startIcon={<EmailIcon />}
+                      sx={{ width: 'fit-content', px: 0, textTransform: 'none' }}
+                    >
+                      lucas.marques@unir.br
+                    </Button>
+                  </Stack>
                 </Stack>
               </Paper>
             </Grid>
@@ -201,19 +213,22 @@ export const About: React.FC = () => {
         {/* Institution section */}
         <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, bgcolor: 'background.default' }}>
           <Grid container spacing={2} alignItems="center">
-            <Grid xs={12} md={8}>
+            <Grid xs={12} md={7}>
               <Stack direction="row" spacing={2} alignItems="center">
                 <AccountBalanceIcon color="primary" fontSize="large" />
-                <Stack spacing={0.5}>
+                <Stack spacing={0.25}>
                   <Typography variant="subtitle1" fontWeight={700}>
                     Federal University of Rondônia (UNIR)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Department of Computer Science (DACC)
                   </Typography>
                 </Stack>
               </Stack>
             </Grid>
 
-            <Grid xs={12} md={4}>
-              <Stack direction="row" spacing={1.5} justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+            <Grid xs={12} md={5}>
+              <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
                 <Button
                   variant="outlined"
                   size="small"
@@ -227,10 +242,11 @@ export const About: React.FC = () => {
                 <Button
                   variant="outlined"
                   size="small"
-                  href="mailto:unir@unir.br"
+                  href="mailto:dacc@unir.br"
                   startIcon={<EmailIcon />}
+                  sx={{ textTransform: 'none' }}
                 >
-                  Contact
+                  dacc@unir.br
                 </Button>
               </Stack>
             </Grid>

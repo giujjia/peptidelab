@@ -7,6 +7,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import InputIcon from "@mui/icons-material/Input";
 import { api } from "../../services/api";
+import { errorMessage } from "../../services/errors";
+import { useNotification } from "../../contexts/NotificationContext";
 import { downloadBlob } from "../../utils/download";
 
 interface JobFormProps {
@@ -32,6 +34,7 @@ export const JobForm: React.FC<JobFormProps> = ({
   isAuthenticated,
   mutationType
 }) => {
+  const { notify } = useNotification();
   const [inputMode, setInputMode] = useState("text");
   const [inputValue, setInputValue] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -179,10 +182,11 @@ export const JobForm: React.FC<JobFormProps> = ({
           startIcon={<DownloadIcon fontSize="small" />}
           onClick={async () => {
             try {
-              const res = await api.get(`/processor/examples/${mutationType}?download=true`, { responseType: "blob" });
+              const res = await api.get(`/processor/examples/${encodeURIComponent(mutationType)}?download=true`, { responseType: "blob" });
               downloadBlob(new Blob([res.data]), `${mutationType}_example.tsv`);
             } catch (err) {
               console.error("Failed to download example file", err);
+              notify(errorMessage(err, "Failed to download sample file"), "error");
             }
           }}
           sx={{ textTransform: "none", fontWeight: 600, color: "text.secondary" }}

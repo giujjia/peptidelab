@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Typography, Container, Paper, CircularProgress, Button } from '@mui/material';
+import { Box, Typography, Container, Paper, Button } from '@mui/material';
 import Grid from '@mui/material/Unstable_Grid2';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,7 +7,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { useJobPolling } from '../hooks/useJobPolling';
 import { api } from '../services/api';
 import { errorMessage } from '../services/errors';
-import { downloadBlob } from '../utils/download';
+import { downloadBlob, downloadSessionWorkbook } from '../utils/download';
 import { mutationTypes } from '../components/processor/constants';
 import { MutationTypeSelector } from '../components/processor/MutationTypeSelector';
 import { JobForm } from '../components/processor/JobForm';
@@ -33,8 +33,9 @@ const GuestHistoryNotice: React.FC = () => {
 };
 
 export const Processor: React.FC = () => {
+  const navigate = useNavigate();
   const { notify } = useNotification();
-  const { isAuthenticated, isLoading, session } = useAuth();
+  const { isAuthenticated, session } = useAuth();
   // Muda no logout e tambem na troca direta de conta feita em outra aba
   const identity = session?.access_token ?? null;
   
@@ -60,16 +61,8 @@ export const Processor: React.FC = () => {
     setViewJobLoading(false);
   };
 
-  const { jobs, fetchJobs } = useJobPolling(identity);
+  const { jobs, analysisTasks, fetchJobs } = useJobPolling(identity);
   const current = mutationTypes.find((m) => m.id === mutationType)!;
-
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: "calc(100vh - 48px)" }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   const handleProcessData = async (inputMode: string, text: string, file: File | null) => {
     setIsSubmitting(true);
@@ -105,23 +98,7 @@ export const Processor: React.FC = () => {
         notify('Processing completed! Your download has started.', 'success');
       } catch (err: any) {
         console.error("Error processing guest data", err);
-        let errorMsg = 'Unable to process guest request.';
-        
-        if (err.response && err.response.data instanceof Blob) {
-          try {
-            const errorText = await err.response.data.text();
-            const errorJson = JSON.parse(errorText);
-            if (errorJson && errorJson.detail) {
-              errorMsg = errorJson.detail;
-            }
-          } catch (parseErr) {
-            console.error("Failed to parse error blob as JSON", parseErr);
-          }
-        } else if (err.response && err.response.data && err.response.data.detail) {
-          errorMsg = err.response.data.detail;
-        }
-        
-        notify(errorMsg);
+        notify(errorMessage(err, 'Unable to process guest request.'));
       } finally {
         setIsSubmitting(false);
       }
@@ -133,7 +110,7 @@ export const Processor: React.FC = () => {
   const handleRunExample = async () => {
     setIsSubmitting(true);
     try {
-      const response = await api.post(`/processor/run-example/${mutationType}`, {}, {
+      const response = await api.post(`/processor/run-example/${encodeURIComponent(mutationType)}`, {}, {
         responseType: "blob"
       });
       const blob = new Blob([response.data], { type: "application/zip" });
@@ -141,7 +118,7 @@ export const Processor: React.FC = () => {
       notify(`Example for ${current.label} processed! Results downloaded without registering a permanent job.`, "success");
     } catch (err: any) {
       console.error("Error running example", err);
-      notify("Failed to process example");
+      notify(errorMessage(err, "Failed to process example"));
     } finally {
       setIsSubmitting(false);
     }
@@ -149,14 +126,14 @@ export const Processor: React.FC = () => {
 
   const handleLoadExampleText = async (): Promise<string> => {
     try {
-      const res = await api.get(`/processor/examples/${mutationType}`);
+      const res = await api.get(`/processor/examples/${encodeURIComponent(mutationType)}`);
       if (res.data && res.data.content) {
         notify(`Sample data loaded for ${current.label}`, "info");
         return res.data.content;
       }
     } catch (err) {
       console.error("Failed to load example text", err);
-      notify("Failed to load sample text");
+      notify(errorMessage(err, "Failed to load sample text"));
     }
     return "";
   };
@@ -172,12 +149,13 @@ export const Processor: React.FC = () => {
 
     try {
       // Backend informa quais saidas o tipo de mutacao gera e o resumo de linhas rejeitadas
-      const { data: info } = await api.get(`/jobs/${jobId}/outputs`);
+      const encodedJobId = encodeURIComponent(jobId);
+      const { data: info } = await api.get(`/jobs/${encodedJobId}/outputs`);
       const outputs: JobOutputView[] = await Promise.all(
         (info.outputs || []).map(async (o: { type: string; available: boolean }): Promise<JobOutputView> => {
           if (!o.available) return { type: o.type, status: 'missing', content: '' };
           try {
-            const res = await api.get(`/jobs/${jobId}/outputs/${o.type}`, { responseType: 'text' });
+            const res = await api.get(`/jobs/${encodedJobId}/outputs/${encodeURIComponent(o.type)}`, { responseType: 'text' });
             return { type: o.type, status: 'ok', content: res.data };
           } catch {
             return { type: o.type, status: 'error', content: '' };
@@ -197,21 +175,29 @@ export const Processor: React.FC = () => {
 
   const handleDownloadZip = async (jobId: string) => {
     try {
-      const response = await api.get(`/jobs/${jobId}/outputs/zip`, { responseType: 'blob' });
+      const response = await api.get(`/jobs/${encodeURIComponent(jobId)}/outputs/zip`, { responseType: 'blob' });
       downloadBlob(new Blob([response.data]), `peptidelab_job_${jobId}_outputs.zip`);
     } catch (err) {
       console.error(err);
-      notify('Failed to download ZIP file');
+      notify(errorMessage(err, 'Failed to download ZIP file'));
     }
   };
 
   const handleDeleteJob = async (jobId: string) => {
     try {
-      await api.delete(`/jobs/${jobId}`);
+      await api.delete(`/jobs/${encodeURIComponent(jobId)}`);
       notify('Job deleted successfully', 'success');
       await fetchJobs();
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to delete job', 'error');
+      notify(errorMessage(err, 'Failed to delete job'), 'error');
+    }
+  };
+
+  const handleDownloadTaskSession = async (sessionId: string) => {
+    try {
+      await downloadSessionWorkbook(sessionId);
+    } catch (err: any) {
+      notify(errorMessage(err, 'Session expired or file unavailable'), 'error');
     }
   };
 
@@ -253,11 +239,14 @@ export const Processor: React.FC = () => {
             {isAuthenticated ? (
               <JobsList 
                 jobs={jobs}
+                analysisTasks={analysisTasks}
                 isAuthenticated={isAuthenticated}
                 currentMutationLabel={current.label}
                 onViewJob={handleViewJob}
                 onDownloadZip={handleDownloadZip}
                 onDeleteJob={handleDeleteJob}
+                onOpenTaskSession={(sid) => navigate(`/analysis?session_id=${encodeURIComponent(sid)}`)}
+                onDownloadTaskSession={handleDownloadTaskSession}
               />
             ) : (
               <GuestHistoryNotice />

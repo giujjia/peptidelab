@@ -19,10 +19,11 @@ interface EsmPopoverProps {
   }) => void;
   columns: string[];
   totalRows?: number;
+  maxRows?: number;
 }
 
 export const EsmPopover: React.FC<EsmPopoverProps> = ({
-  anchorEl, onClose, onConfirm, columns, totalRows = 0
+  anchorEl, onClose, onConfirm, columns, totalRows = 0, maxRows = 200
 }) => {
   const { isAuthenticated } = useAuth();
   const [colunaSeq, setColunaSeq] = useState('');
@@ -31,7 +32,9 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
   const [colunaNew, setColunaNew] = useState('');
   const [notifyEmail, setNotifyEmail] = useState(false);
 
-  const isBlockedGuest = !isAuthenticated && totalRows > 10;
+  const isBlockedGuest = !isAuthenticated;
+  const isOverRowLimit = isAuthenticated && totalRows > maxRows;
+  const isDisabled = isBlockedGuest || isOverRowLimit;
 
   // Limpa estados ao abrir popover
   useEffect(() => {
@@ -55,7 +58,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
   };
 
   const prontoParaEnviar =
-    !isBlockedGuest &&
+    !isDisabled &&
     colunaSeq !== '' &&
     colunaPos !== '' &&
     colunaOld !== '' &&
@@ -102,7 +105,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           icon={<LockOutlinedIcon fontSize="inherit" />}
           sx={{ mb: 2, fontSize: '0.8rem', py: 0.5 }}
         >
-          Guest mode is limited to 10 rows for testing. Please{' '}
+          ESM-1v scoring is available to registered users only. Please{' '}
           <RouterLink to="/register" style={{ fontWeight: 600, color: '#5248A2' }}>
             create a free account
           </RouterLink>{' '}
@@ -110,16 +113,20 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           <RouterLink to="/login" style={{ fontWeight: 600, color: '#5248A2' }}>
             sign in
           </RouterLink>{' '}
-          to process this {totalRows}-row dataset.
+          to run predictions.
+        </Alert>
+      ) : isOverRowLimit ? (
+        <Alert severity="warning" sx={{ mb: 2, fontSize: '0.8rem', py: 0.5 }}>
+          ESM-1v is limited to {maxRows} rows per run (current sheet has {totalRows} rows). Filter your dataset before running.
         </Alert>
       ) : (
         <Alert severity="warning" sx={{ mb: 2, fontSize: '0.75rem', py: 0.5 }}>
-          Runs asynchronously in background without blocking your screen.
+          Runs asynchronously in the background (up to {maxRows} rows per run, 1 active ESM-1v task per user).
         </Alert>
       )}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <FormControl fullWidth size="small" disabled={isBlockedGuest}>
+        <FormControl fullWidth size="small" disabled={isDisabled}>
           <InputLabel>Sequence Column</InputLabel>
           <Select
             value={colunaSeq}
@@ -132,7 +139,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           </Select>
         </FormControl>
 
-        <FormControl fullWidth size="small" disabled={isBlockedGuest}>
+        <FormControl fullWidth size="small" disabled={isDisabled}>
           <InputLabel>Position Column</InputLabel>
           <Select
             value={colunaPos}
@@ -145,7 +152,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           </Select>
         </FormControl>
 
-        <FormControl fullWidth size="small" disabled={isBlockedGuest}>
+        <FormControl fullWidth size="small" disabled={isDisabled}>
           <InputLabel>Original AA Column</InputLabel>
           <Select
             value={colunaOld}
@@ -158,7 +165,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           </Select>
         </FormControl>
 
-        <FormControl fullWidth size="small" disabled={isBlockedGuest}>
+        <FormControl fullWidth size="small" disabled={isDisabled}>
           <InputLabel>Mutant AA Column</InputLabel>
           <Select
             value={colunaNew}
@@ -171,7 +178,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           </Select>
         </FormControl>
 
-        {isAuthenticated && !isBlockedGuest && (
+        {isAuthenticated && !isDisabled && (
           <Box sx={{ mt: -0.5, mb: -0.5 }}>
             <FormControlLabel
               control={
@@ -184,7 +191,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
               }
               label={
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Avise-me por e-mail quando a análise terminar
+                  Notify me by email when the analysis finishes
                 </Typography>
               }
             />
@@ -198,7 +205,7 @@ export const EsmPopover: React.FC<EsmPopoverProps> = ({
           fullWidth
           sx={{ mt: 0.5 }}
         >
-          {isBlockedGuest ? 'Sign in to Run' : 'Run Predictions'}
+          {isBlockedGuest ? 'Sign in to Run' : isOverRowLimit ? `Limit: ${maxRows} Rows` : 'Run Predictions'}
         </Button>
       </Box>
     </Popover>

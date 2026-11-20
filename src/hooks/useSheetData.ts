@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { api } from '../services/api';
-import { downloadBlob } from '../utils/download';
+import { errorMessage } from '../services/errors';
+import { downloadSessionWorkbook } from '../utils/download';
 import { SheetInfo, SheetData } from '../types';
 
 // Formato unico de sessao aberta (upload, Job carregado ou reabertura)
@@ -22,14 +23,14 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef('');
   searchRef.current = searchQuery;
+  const lastLoadedSearchedRef = useRef(false);
 
   // Catalogo de abas acompanha colunas e total confirmados pelo servidor apos cada operacao
   useEffect(() => {
     const name = sheetData?.sheet_name;
     if (!name) return;
     setSheetsInfo(prev => {
-      const searching = searchRef.current.trim() !== '';
-      const rowCount = searching ? prev[name]?.row_count ?? sheetData.total_rows : sheetData.total_rows;
+      const rowCount = lastLoadedSearchedRef.current ? prev[name]?.row_count ?? sheetData.total_rows : sheetData.total_rows;
       return { ...prev, [name]: { ...prev[name], columns: sheetData.all_columns, row_count: rowCount } };
     });
   }, [sheetData]);
@@ -37,15 +38,18 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
   // So a pagina do pedido mais recente, e da sessao atual, chega a tela
   const pedidoRef = useRef(0);
   const sessaoRef = useRef('');
+  const openSeqRef = useRef(0);
 
   const searchParams = () => {
     const q = searchRef.current.trim();
     return q ? { search: q } : {};
   };
 
-  const processResponse = useCallback(async (data: any) => {
+  const processResponse = useCallback(async (data: any, openSeq?: number) => {
+    if (openSeq !== undefined && openSeq !== openSeqRef.current) return false;
     setSearchQuery('');
     searchRef.current = '';
+    lastLoadedSearchedRef.current = false;
     sessaoRef.current = data.session_id;
     const pedido = ++pedidoRef.current;
     setSessionId(data.session_id);
@@ -55,41 +59,53 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       setActiveSheet(firstSheet);
       setLoadingSheet(true);
       try {
-        const res = await api.get(`/analysis/sheet/${data.session_id}/${firstSheet}`, {
+        // Nome da aba vem do usuario; # % ? no caminho cortariam ou corromperiam a URL
+        const res = await api.get(`/analysis/sheet/${encodeURIComponent(data.session_id)}/${encodeURIComponent(firstSheet)}`, {
           params: { page: 1, page_size: 50 }
         });
-        if (pedido === pedidoRef.current) setSheetData(res.data);
+        if (pedido === pedidoRef.current) {
+          lastLoadedSearchedRef.current = false;
+          setSheetData(res.data);
+        }
       } catch (err: any) {
         console.error(err);
-        if (pedido === pedidoRef.current) notify(err.response?.data?.detail || 'Failed to load sheet data', 'error');
+        if (pedido === pedidoRef.current) notify(errorMessage(err, 'Failed to load sheet data'), 'error');
       } finally {
         if (pedido === pedidoRef.current) setLoadingSheet(false);
       }
+    } else {
+      setActiveSheet('');
+      setSheetData(null);
     }
     fetchJobs();
+    return true;
   }, [fetchJobs, notify]);
 
   const fetchSheetData = useCallback(async (sheet: string, page: number = 1) => {
     const pedido = ++pedidoRef.current;
     const atual = () => pedido === pedidoRef.current && sessaoRef.current === sessionId;
+    const params = searchParams();
+    const wasSearching = Boolean(params.search);
     setLoadingSheet(true);
     try {
-      const res = await api.get(`/analysis/sheet/${sessionId}/${sheet}`, {
-        params: { page, page_size: 50, ...searchParams() }
+      const res = await api.get(`/analysis/sheet/${encodeURIComponent(sessionId)}/${encodeURIComponent(sheet)}`, {
+        params: { page, page_size: 50, ...params }
       });
       // Resposta de pedido anterior ou de outra sessao e descartada
       if (!atual()) return;
+      lastLoadedSearchedRef.current = wasSearching;
       setSheetData(res.data);
       setActiveSheet(sheet);
     } catch (err: any) {
       console.error(err);
-      if (atual()) notify(err.response?.data?.detail || 'Failed to load sheet data', 'error');
+      if (atual()) notify(errorMessage(err, 'Failed to load sheet data'), 'error');
     } finally {
       if (pedido === pedidoRef.current) setLoadingSheet(false);
     }
   }, [sessionId, notify]);
 
   const handleUpload = async (files: File[]) => {
+    const seq = ++openSeqRef.current;
     setUploading(true);
     const formData = new FormData();
     files.forEach(file => {
@@ -99,11 +115,11 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       const res = await api.post('/analysis/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      await processResponse(res.data);
+      await processResponse(res.data, seq);
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Upload failed', 'error');
+      if (seq === openSeqRef.current) notify(errorMessage(err, 'Upload failed'), 'error');
     } finally {
-      setUploading(false);
+      if (seq === openSeqRef.current) setUploading(false);
     }
   };
 
@@ -131,105 +147,112 @@ export function useSheetData(notify: (msg: string, type?: 'success' | 'error' | 
       }
       notify(res.data.message || 'Files imported successfully!', 'success');
     } catch (err: any) {
-      if (sameSession()) notify(err.response?.data?.detail || 'Failed to import files', 'error');
+      if (sameSession()) notify(errorMessage(err, 'Failed to import files'), 'error');
     } finally {
       if (sameSession()) setLoadingSheet(false);
     }
   };
 
   const handleLoadExample = async () => {
+    const seq = ++openSeqRef.current;
     setUploading(true);
     try {
       const res = await api.post('/analysis/load-example');
-      await processResponse(res.data);
+      await processResponse(res.data, seq);
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to load example', 'error');
+      if (seq === openSeqRef.current) notify(errorMessage(err, 'Failed to load example'), 'error');
     } finally {
-      setUploading(false);
+      if (seq === openSeqRef.current) setUploading(false);
     }
   };
 
   const handleLoadCompareExample = async () => {
+    const seq = ++openSeqRef.current;
     setUploading(true);
     try {
       const res = await api.post('/analysis/load-compare-example');
-      await processResponse(res.data);
-      notify('Compare datasets (Round 1 vs Round 2) loaded successfully!', 'success');
+      const applied = await processResponse(res.data, seq);
+      if (applied) notify('Compare datasets (Round 1 vs Round 2) loaded successfully!', 'success');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to load compare example', 'error');
+      if (seq === openSeqRef.current) notify(errorMessage(err, 'Failed to load compare example'), 'error');
     } finally {
-      setUploading(false);
+      if (seq === openSeqRef.current) setUploading(false);
     }
   };
 
   const handleLoadJobSession = async (jobId: string) => {
+    const seq = ++openSeqRef.current;
     setUploading(true);
     try {
-      const res = await api.post(`/analysis/load-job-session/${jobId}`);
-      await processResponse(res.data);
-      return res.data as SessionResponse;
+      const res = await api.post(`/analysis/load-job-session/${encodeURIComponent(jobId)}`);
+      const applied = await processResponse(res.data, seq);
+      return applied ? (res.data as SessionResponse) : null;
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to load job', 'error');
+      if (seq === openSeqRef.current) notify(errorMessage(err, 'Failed to load job'), 'error');
       return null;
     } finally {
-      setUploading(false);
+      if (seq === openSeqRef.current) setUploading(false);
     }
   };
 
   // Reabre sessao existente pelo historico de tarefas ou pelo link do email
   const handleReopenSession = async (targetSessionId: string) => {
+    const seq = ++openSeqRef.current;
     setUploading(true);
     try {
-      const res = await api.get(`/analysis/session/${targetSessionId}`);
-      await processResponse(res.data);
-      return res.data as SessionResponse;
+      const res = await api.get(`/analysis/session/${encodeURIComponent(targetSessionId)}`);
+      const applied = await processResponse(res.data, seq);
+      return applied ? (res.data as SessionResponse) : null;
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Session not found or expired', 'error');
+      if (seq === openSeqRef.current) notify(errorMessage(err, 'Session not found or expired'), 'error');
       return null;
     } finally {
-      setUploading(false);
+      if (seq === openSeqRef.current) setUploading(false);
     }
   };
 
   const handleDownload = async () => {
+    if (!sessionId) return;
     try {
-      const res = await api.get(`/analysis/download/${sessionId}`, { responseType: 'blob' });
-      downloadBlob(res.data, `analysis_${sessionId.slice(0, 8)}.xlsx`);
+      await downloadSessionWorkbook(sessionId);
       notify('Export includes every row of every sheet. The search filter is not applied to the file.', 'info');
-    } catch {
-      notify('Failed to download file', 'error');
+    } catch (err: any) {
+      notify(errorMessage(err, 'Failed to download file'), 'error');
     }
   };
 
   // Sai do workspace atual sem apagar a sessao no servidor; ela segue a retencao e pode ser reaberta
-  const resetWorkspace = () => {
+  const resetWorkspace = useCallback(() => {
     // Pedidos em andamento deixam de valer ao sair da sessao
+    openSeqRef.current += 1;
     pedidoRef.current += 1;
     sessaoRef.current = '';
+    setUploading(false);
     setSessionId('');
     setSearchQuery('');
     setSheetsInfo({});
     setSheetData(null);
     setActiveSheet('');
-  };
+  }, []);
 
   // Exclusao so por acao explicita do usuario; devolve false quando o servidor recusa
   const handleDeleteSession = async () => {
+    if (!sessionId) return false;
+    const origin = sessionId;
     try {
-      await api.delete(`/analysis/session/${sessionId}`);
+      await api.delete(`/analysis/session/${encodeURIComponent(origin)}`);
     } catch (err: any) {
       if (err.response?.status !== 404) {
-        notify(err.response?.data?.detail || 'Failed to delete session', 'error');
+        if (sessaoRef.current === origin) notify(errorMessage(err, 'Failed to delete session'), 'error');
         return false;
       }
     }
-    resetWorkspace();
+    if (sessaoRef.current === origin) resetWorkspace();
     return true;
   };
 
   return {
     sessionId, sheetsInfo, activeSheet, sheetData, loadingSheet, uploading, searchQuery, setSearchQuery,
     setSheetsInfo, setSheetData, fetchSheetData, handleUpload, handleImportFiles, handleLoadExample, handleLoadCompareExample, handleLoadJobSession, handleReopenSession, handleDownload, resetWorkspace, handleDeleteSession,
-    processResponse
   };
 }

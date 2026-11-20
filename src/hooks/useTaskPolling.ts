@@ -21,11 +21,14 @@ export function useTaskPolling(
   task: TrackedTask | null,
   onFinish: (task: TrackedTask, outcome: TaskOutcome, data: any) => void,
   intervalMs = 2000,
-  maxFailures = 5
+  maxFailures = 5,
+  onProgress?: (task: TrackedTask, data: any) => void
 ) {
   // Callback mais recente sem reiniciar o acompanhamento a cada render
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
+  const onProgressRef = useRef(onProgress);
+  onProgressRef.current = onProgress;
 
   useEffect(() => {
     if (!task) return;
@@ -46,7 +49,11 @@ export function useTaskPolling(
         const { data } = await api.get(task.statusUrl);
         if (stopped) return;
         failures = 0;
-        if (TERMINAL.includes(data?.status)) finish(data.status, data);
+        if (TERMINAL.includes(data?.status)) {
+          finish(data.status, data);
+        } else if (onProgressRef.current) {
+          onProgressRef.current(task, data);
+        }
       } catch {
         if (stopped) return;
         failures += 1;

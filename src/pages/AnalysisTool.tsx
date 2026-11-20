@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, LinearProgress, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import { Box, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { api } from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,26 +26,35 @@ import { RemovalConfirmDialog, RemovalPreview } from '../components/analysis/Rem
 import { errorMessage } from '../services/errors';
 
 const FILTER_CONFIG = {
-  'add-genes': { title: 'Add Gene Information', description: 'Automatically fetches and maps gene symbols from the NCBI Entrez database based on your protein identifiers (e.g. GI or Locus).' },
+  'add-genes': { title: 'Add Gene Information', description: 'Maps gene symbols from your protein identifiers (e.g. NP_ or NM_ accessions) using the copy of NCBI gene2refseq stored on the server.' },
   'add-protein-id': { title: 'Add Protein ID', description: 'Matches sequences from this active sheet to your connected Job\'s database to automatically retrieve their Protein IDs.' },
-  'remove-contaminants': { title: 'Remove Contaminants', description: 'Scans the selected column and permanently deletes rows containing a specified keyword.' },
+  'remove-contaminants': { title: 'Remove Contaminants', description: 'Scans the selected column and permanently deletes rows matching a regular expression. You confirm after seeing how many rows match.' },
   'filter-numeric': { title: 'Filter Numeric', description: 'Filters the selected numerical column based on an operator and threshold.' },
 };
 
+const SAFE_SESSION_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 export const AnalysisTool: React.FC = () => {
   const { notify } = useNotification();
+  const { session: authSession, isLoading: authLoading } = useAuth();
+  const identity = authSession?.access_token ?? null;
+  const prevIdentityRef = useRef<string | null | undefined>(undefined);
   
   const [availableJobs, setAvailableJobs] = useState<AvailableJob[]>([]);
   const [jobsDrawerOpen, setJobsDrawerOpen] = useState(false);
 
   const fetchJobs = useCallback(async () => {
+    if (!identity) {
+      setAvailableJobs([]);
+      return;
+    }
     try {
       const res = await api.get('/analysis/jobs');
-      setAvailableJobs(res.data);
+      setAvailableJobs(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
     }
-  }, []);
+  }, [identity]);
 
   useEffect(() => {
     fetchJobs();
@@ -53,10 +62,15 @@ export const AnalysisTool: React.FC = () => {
 
   // Servidor sem ESM instalado mostra o botao desativado em vez de falhar no envio
   const [esmAvailable, setEsmAvailable] = useState(true);
+  const [esmMaxRows, setEsmMaxRows] = useState(200);
   useEffect(() => {
     let ativo = true;
     api.get('/analysis/capabilities')
-      .then(res => { if (ativo && res?.data?.esm === false) setEsmAvailable(false); })
+      .then(res => {
+        if (!ativo) return;
+        if (res?.data?.esm === false) setEsmAvailable(false);
+        if (typeof res?.data?.esm_max_rows === 'number') setEsmMaxRows(res.data.esm_max_rows);
+      })
       .catch(() => {});
     return () => { ativo = false; };
   }, []);
@@ -72,6 +86,10 @@ export const AnalysisTool: React.FC = () => {
   } = useColumnVisibility(sessionId, activeSheet, sheetData, setSheetData, notify, searchQuery);
 
 
+  // Sessao exibida agora, para descartar respostas de pedidos iniciados antes do New Analysis
+  const currentSessionRef = useRef(sessionId);
+  currentSessionRef.current = sessionId;
+
   // Job connection
   const [connectedJobId, setConnectedJobId] = useState('');
   const [connectedJobInfo, setConnectedJobInfo] = useState<{ mutation_type: string; dbpepmutref_rows: number } | null>(null);
@@ -85,6 +103,8 @@ export const AnalysisTool: React.FC = () => {
   // ESM-1v State
   const [esmAnchorEl, setEsmAnchorEl] = useState<null | HTMLElement>(null);
   const [esmTask, setEsmTask] = useState<TaskInfo | null>(null);
+  const [esmTrackedTask, setEsmTrackedTask] = useState<TrackedTask | null>(null);
+  const [esmStarting, setEsmStarting] = useState(false);
 
   // ID Mapping & Compare State
   const [idMappingAnchorEl, setIdMappingAnchorEl] = useState<null | HTMLElement>(null);
@@ -94,77 +114,66 @@ export const AnalysisTool: React.FC = () => {
   const [crossValAnchorEl, setCrossValAnchorEl] = useState<null | HTMLElement>(null);
   const [compareTask, setCompareTask] = useState<TrackedTask | null>(null);
 
-  // Polling para ESM-1v
-  const isEsmPollingRef = useRef(false);
-  const esmTaskId = esmTask?.taskId;
-  const esmTaskStatus = esmTask?.status;
-  const esmTaskSheet = esmTask?.sheetName;
-  const esmTaskSession = esmTask?.sessionId;
-
-  useEffect(() => {
-    if (!esmTaskId || (esmTaskStatus !== 'pending' && esmTaskStatus !== 'running')) return;
-
-    let failCount = 0;
-    let isCancelled = false;
-
-    const poll = async () => {
-      if (isEsmPollingRef.current || isCancelled) return;
-      isEsmPollingRef.current = true;
-
-      try {
-        const { data } = await api.get(`/analysis/task/${esmTaskId}`);
-        if (isCancelled) return;
-
-        failCount = 0;
-        setEsmTask(prev => {
-          if (!prev || prev.taskId !== esmTaskId) return prev;
-          return {
-            ...prev,
-            status: data.status,
-            progress: data.processed ?? prev.progress,
-            total: data.total ?? prev.total,
-            error: data.error,
-          };
-        });
-
-        if (data.status === 'done') {
-          notify('ESM-1v scoring complete!', 'success');
-          if (esmTaskSession === sessionId && esmTaskSheet === activeSheet) {
-            fetchSheetData(activeSheet, sheetData?.page || 1);
-          } else if (esmTaskSheet) {
-            notify(`Results ready on sheet "${esmTaskSheet}"`, 'info');
-          }
-        } else if (data.status === 'error') {
-          notify(`ESM-1v Error: ${data.error || 'Execution failed'}`, 'error');
-        }
-      } catch {
-        if (isCancelled) return;
-        failCount++;
-        if (failCount >= 5) {
-          setEsmTask(prev => prev && prev.taskId === esmTaskId ? { ...prev, status: 'error', error: 'Polling stopped due to repeated network errors' } : prev);
-          notify('ESM-1v polling stopped due to network errors', 'error');
-        }
-      } finally {
-        isEsmPollingRef.current = false;
-      }
-    };
-
-    const interval = setInterval(poll, 2000);
-
-    return () => {
-      isCancelled = true;
-      clearInterval(interval);
-      isEsmPollingRef.current = false;
-    };
-  }, [esmTaskId, esmTaskStatus, esmTaskSheet, esmTaskSession, sessionId, activeSheet, sheetData?.page, fetchSheetData, notify]);
-
-  // Indicador de ID Mapping vale so para a sessao que iniciou a tarefa
-  const idMappingRunning = idMappingStarting || (!!idMappingTask && idMappingTask.sessionId === sessionId);
-
   // Resultado de tarefa so altera a tela se ela ainda mostra a sessao de origem
   const notifyOtherSession = (label: string, outcome: TaskOutcome) => {
     if (outcome === 'done') notify(`${label} finished in another session. Open it from Background Tasks.`, 'info');
   };
+
+  useTaskPolling(
+    esmTrackedTask,
+    (task, outcome, data) => {
+      setEsmTrackedTask(prev => (prev?.taskId === task.taskId ? null : prev));
+      setEsmTask(prev => {
+        if (!prev || prev.taskId !== task.taskId) return prev;
+        if (outcome === 'lost') {
+          return { ...prev, status: 'error', error: 'Polling stopped due to repeated network errors' };
+        }
+        return {
+          ...prev,
+          status: outcome,
+          progress: data?.processed ?? prev.progress,
+          total: data?.total ?? prev.total,
+          error: data?.error,
+        };
+      });
+      if (task.sessionId !== sessionId) {
+        notifyOtherSession('ESM-1v scoring', outcome);
+        return;
+      }
+      if (outcome === 'done') {
+        if (task.sheetName === activeSheet) {
+          notify('ESM-1v scoring complete!', 'success');
+          fetchSheetData(activeSheet, sheetData?.page || 1);
+        } else if (task.sheetName) {
+          notify(`ESM-1v scoring complete! Results ready on sheet "${task.sheetName}"`, 'success');
+        }
+      } else if (outcome === 'error') {
+        notify(`ESM-1v Error: ${data?.error || 'Execution failed'}`, 'error');
+      } else if (outcome === 'cancelled') {
+        notify('ESM-1v scoring cancelled', 'info');
+      } else {
+        notify('ESM-1v polling stopped due to network errors', 'error');
+      }
+    },
+    2000,
+    5,
+    (task, data) => {
+      setEsmTask(prev => {
+        if (!prev || prev.taskId !== task.taskId) return prev;
+        return {
+          ...prev,
+          status: data.status,
+          progress: data.processed ?? prev.progress,
+          total: data.total ?? prev.total,
+          error: data.error,
+        };
+      });
+    }
+  );
+
+  // Indicador de ID Mapping e ESM valem so para a sessao que iniciou a tarefa
+  const idMappingRunning = idMappingStarting || (!!idMappingTask && idMappingTask.sessionId === sessionId);
+  const esmRunning = esmStarting || (!!esmTask && esmTask.sessionId === sessionId && (esmTask.status === 'pending' || esmTask.status === 'running'));
 
   useTaskPolling(idMappingTask, (task, outcome, data) => {
     setIdMappingTask(prev => (prev?.taskId === task.taskId ? null : prev));
@@ -213,41 +222,50 @@ export const AnalysisTool: React.FC = () => {
     }
   });
 
-  const handleConnectJob = async (jobId: string) => {
-    if (!jobId || !sessionId) return;
+  const handleConnectJob = async (jobId: string): Promise<boolean> => {
+    if (!jobId || !sessionId) return false;
+    const origin = sessionId;
     setConnectingJob(true);
     try {
       const res = await api.post('/analysis/connect-job', {
-        session_id: sessionId,
+        session_id: origin,
         job_id: jobId,
       });
+      // Resposta que chega depois do New Analysis pertence a sessao anterior
+      if (currentSessionRef.current !== origin) return false;
       setConnectedJobId(jobId);
       setConnectedJobInfo({
         mutation_type: res.data.mutation_type,
         dbpepmutref_rows: res.data.dbpepmutref_rows,
       });
       notify('Job connected to active session successfully!', 'success');
+      return true;
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to connect job', 'error');
+      if (currentSessionRef.current === origin) notify(errorMessage(err, 'Failed to connect job'), 'error');
+      return false;
     } finally {
       setConnectingJob(false);
     }
   };
 
-  const handleOpenSession = useCallback(async (targetSessionId: string) => {
+  const handleOpenSession = useCallback(async (targetSessionId: string): Promise<boolean> => {
     const data = await handleReopenSession(targetSessionId);
     if (data) {
       setConnectedJobId(data.connected_job_id || '');
       setConnectedJobInfo(data.connected_job_info || null);
+      return true;
     }
+    return false;
   }, [handleReopenSession]);
 
-  const handleLoadJob = async (jobId: string) => {
+  const handleLoadJob = async (jobId: string): Promise<boolean> => {
     const data = await handleLoadJobSession(jobId);
     if (data) {
       setConnectedJobId(data.connected_job_id || '');
       setConnectedJobInfo(data.connected_job_info || null);
+      return true;
     }
+    return false;
   };
 
   // Busca no servidor com pequena espera entre teclas
@@ -267,7 +285,6 @@ export const AnalysisTool: React.FC = () => {
   }, [searchQuery]);
 
   // Link do email traz ?session_id=; abre depois que a autenticacao foi restaurada
-  const { isLoading: authLoading } = useAuth();
   const sessionFromLinkRef = useRef(false);
   useEffect(() => {
     if (authLoading || sessionFromLinkRef.current) return;
@@ -278,18 +295,44 @@ export const AnalysisTool: React.FC = () => {
     params.delete('session_id');
     const qs = params.toString();
     window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    if (!SAFE_SESSION_ID.test(linkSessionId)) {
+      notify('Invalid session link', 'error');
+      return;
+    }
     handleOpenSession(linkSessionId);
-  }, [authLoading, handleOpenSession]);
+  }, [authLoading, handleOpenSession, notify]);
+
+  // Limpa workspace e tarefas quando a identidade muda (logout ou troca de conta em outra aba)
+  useEffect(() => {
+    if (prevIdentityRef.current === undefined) {
+      prevIdentityRef.current = identity;
+      return;
+    }
+    if (prevIdentityRef.current !== identity) {
+      prevIdentityRef.current = identity;
+      resetWorkspace();
+      setConnectedJobId('');
+      setConnectedJobInfo(null);
+      setAvailableJobs([]);
+      setPendingRemoval(null);
+      setEsmTask(null);
+      setEsmTrackedTask(null);
+      setIdMappingTask(null);
+      setCompareTask(null);
+    }
+  }, [identity, resetWorkspace]);
 
   const handleDisconnectJob = async () => {
     if (!sessionId) return;
+    const origin = sessionId;
     try {
-      await api.post('/analysis/disconnect-job', { session_id: sessionId });
+      await api.post('/analysis/disconnect-job', { session_id: origin });
+      if (currentSessionRef.current !== origin) return;
       setConnectedJobId('');
       setConnectedJobInfo(null);
       notify('Job disconnected', 'info');
     } catch (err: any) {
-      notify(errorMessage(err, 'Failed to disconnect job'), 'error');
+      if (currentSessionRef.current === origin) notify(errorMessage(err, 'Failed to disconnect job'), 'error');
     }
   };
 
@@ -299,9 +342,6 @@ export const AnalysisTool: React.FC = () => {
   };
 
   // Edicao que devolve a aba atualizada; 409 recarrega a aba para repetir sobre a versao atual
-  // Sessao exibida agora, para descartar resposta de edicao iniciada antes do New Analysis
-  const currentSessionRef = useRef(sessionId);
-  currentSessionRef.current = sessionId;
 
   const applyEdit = async (url: string, body: Record<string, any>, errorFallback: string) => {
     setFilterLoading(true);
@@ -352,12 +392,15 @@ export const AnalysisTool: React.FC = () => {
         description = `Remove rows where "${params.target_column}" matches the regular expression /${keyword}/ (case insensitive).`;
       }
       // Previa sem gravar: o usuario confirma vendo quantas linhas saem
+      const origin = sessionId;
       setFilterLoading(true);
       try {
         const { data: preview } = await api.post(url, { ...body, dry_run: true });
-        setPendingRemoval({ url, body, description, preview, sessionId });
+        if (currentSessionRef.current === origin) {
+          setPendingRemoval({ url, body, description, preview, sessionId: origin });
+        }
       } catch (err: any) {
-        notify(errorMessage(err, 'Failed to preview filter'), 'error');
+        if (currentSessionRef.current === origin) notify(errorMessage(err, 'Failed to preview filter'), 'error');
       } finally {
         setFilterLoading(false);
       }
@@ -394,35 +437,48 @@ export const AnalysisTool: React.FC = () => {
     col_new_aa: string;
     notify_email?: boolean;
   }) => {
+    if (esmStarting) return;
     setEsmAnchorEl(null);
+    setEsmStarting(true);
+    const origin = { sessionId, sheetName: activeSheet };
     try {
       const res = await api.post('/analysis/run-esm1v', {
-        session_id: sessionId,
-        sheet_name: activeSheet,
+        session_id: origin.sessionId,
+        sheet_name: origin.sheetName,
         ...params,
       });
+      const taskId = res.data.task_id;
       setEsmTask({
-        taskId: res.data.task_id,
+        taskId,
         taskType: 'esm',
         status: 'pending',
         progress: 0,
         total: res.data.total_rows,
-        sheetName: activeSheet,
-        sessionId: sessionId,
+        sheetName: origin.sheetName,
+        sessionId: origin.sessionId,
+      });
+      setEsmTrackedTask({
+        taskId,
+        sessionId: origin.sessionId,
+        sheetName: origin.sheetName,
+        statusUrl: `/analysis/task/${encodeURIComponent(taskId)}`,
       });
       notify('ESM-1v task scheduled successfully in background!', 'success');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to start ESM-1v', 'error');
+      notify(errorMessage(err, 'Failed to start ESM-1v'), 'error');
+    } finally {
+      setEsmStarting(false);
     }
   };
 
   const handleCancelTask = async (taskId: string) => {
     try {
-      await api.post(`/analysis/task/${taskId}/cancel`);
+      await api.post(`/analysis/task/${encodeURIComponent(taskId)}/cancel`);
+      setEsmTrackedTask((prev) => (prev?.taskId === taskId ? null : prev));
       setEsmTask((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
       notify('Task cancelled', 'info');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to cancel task', 'error');
+      notify(errorMessage(err, 'Failed to cancel task'), 'error');
     }
   };
 
@@ -437,12 +493,10 @@ export const AnalysisTool: React.FC = () => {
         col_origin,
       });
       const taskId = res.data.task_id;
-      setIdMappingTask({ taskId, ...origin, statusUrl: `/analysis/id-mapping-status/${taskId}` });
+      setIdMappingTask({ taskId, ...origin, statusUrl: `/analysis/id-mapping-status/${encodeURIComponent(taskId)}` });
       notify('UniProt ID Mapping running in background...', 'info');
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      const msg = typeof detail === 'string' ? detail : 'Failed to start ID Mapping';
-      notify(msg, 'error');
+      notify(errorMessage(err, 'Failed to start ID Mapping'), 'error');
     } finally {
       setIdMappingStarting(false);
     }
@@ -456,10 +510,10 @@ export const AnalysisTool: React.FC = () => {
         session_id: origin,
         ...params,
       });
-      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${res.data.task_id}` });
+      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${encodeURIComponent(res.data.task_id)}` });
       notify('Comparing datasets in background...', 'info');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to start comparison', 'error');
+      notify(errorMessage(err, 'Failed to start comparison'), 'error');
     }
   };
 
@@ -480,10 +534,10 @@ export const AnalysisTool: React.FC = () => {
         session_id: origin,
         ...params,
       });
-      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${res.data.task_id}` });
+      setCompareTask({ taskId: res.data.task_id, sessionId: origin, statusUrl: `/analysis/compare-status/${encodeURIComponent(res.data.task_id)}` });
       notify('Cross-validation started in background...', 'info');
     } catch (err: any) {
-      notify(err.response?.data?.detail || 'Failed to start cross-validation', 'error');
+      notify(errorMessage(err, 'Failed to start cross-validation'), 'error');
     }
   };
 
@@ -516,6 +570,19 @@ export const AnalysisTool: React.FC = () => {
     }
   };
 
+  const jobsDrawer = (
+    <JobsDrawer
+      open={jobsDrawerOpen}
+      onClose={() => setJobsDrawerOpen(false)}
+      onLoadJobAsSession={handleLoadJob}
+      onConnectJobToSession={handleConnectJob}
+      currentSessionId={sessionId}
+      connectedJobId={connectedJobId}
+      onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
+      onOpenSession={handleOpenSession}
+    />
+  );
+
   if (!sessionId) {
     return (
       <>
@@ -526,16 +593,7 @@ export const AnalysisTool: React.FC = () => {
           onLoadCompareExample={handleLoadCompareExample}
           onOpenJobsDrawer={() => setJobsDrawerOpen(true)}
         />
-        <JobsDrawer
-          open={jobsDrawerOpen}
-          onClose={() => setJobsDrawerOpen(false)}
-          onLoadJobAsSession={handleLoadJob}
-          onConnectJobToSession={handleConnectJob}
-          currentSessionId={sessionId}
-          connectedJobId={connectedJobId}
-          onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
-          onOpenSession={handleOpenSession}
-        />
+        {jobsDrawer}
       </>
     );
   }
@@ -558,7 +616,7 @@ export const AnalysisTool: React.FC = () => {
         connectingJob={connectingJob}
         filterLoading={filterLoading}
         filterDialogType={filterDialogType}
-        esmRunning={esmTask !== null && (esmTask.status === 'pending' || esmTask.status === 'running')}
+        esmRunning={esmRunning}
         idMappingRunning={idMappingRunning}
         onConnectJob={handleConnectJob}
         onDisconnectJob={handleDisconnectJob}
@@ -596,25 +654,6 @@ export const AnalysisTool: React.FC = () => {
           onChange={(sheet) => fetchSheetData(sheet, 1)}
         />
 
-        {esmTask && (esmTask.status === 'pending' || esmTask.status === 'running') && (
-          <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', bgcolor: 'rgba(2, 136, 209, 0.04)' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: 'info.main' }}>
-                {esmTask.status === 'pending' ? 'Preparing ESM-1v...' : 'Running ESM-1v predictions...'}
-              </Typography>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                {esmTask.progress} / {esmTask.total} rows ({(esmTask.total > 0 ? (esmTask.progress / esmTask.total) * 100 : 0).toFixed(0)}%)
-              </Typography>
-            </Box>
-            <LinearProgress
-              variant="determinate"
-              value={esmTask.total > 0 ? (esmTask.progress / esmTask.total) * 100 : 0}
-              color="info"
-              sx={{ height: 6, borderRadius: 3 }}
-            />
-          </Box>
-        )}
-
         <DataTable 
           loading={loadingSheet}
           columns={sheetData?.columns ?? []}
@@ -646,13 +685,18 @@ export const AnalysisTool: React.FC = () => {
         onClose={() => setEsmAnchorEl(null)}
         onConfirm={handleEsmConfirm}
         columns={sheetData?.all_columns || []}
-        totalRows={sheetData?.total_rows || 0}
+        totalRows={sheetsInfo[activeSheet]?.row_count ?? sheetData?.total_rows ?? 0}
+        maxRows={esmMaxRows}
       />
 
       <TaskProgressWidget
-        task={esmTask}
+        task={esmTask && esmTask.sessionId === sessionId ? esmTask : null}
         onCancel={handleCancelTask}
-        onRefreshResults={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
+        onRefreshResults={() => {
+          if (esmTask && esmTask.sessionId === sessionId) {
+            fetchSheetData(esmTask.sheetName || activeSheet, sheetData?.page || 1);
+          }
+        }}
         onDismiss={() => setEsmTask(null)}
       />
 
@@ -705,16 +749,7 @@ export const AnalysisTool: React.FC = () => {
         onConfirm={handleConfirmRemoval}
       />
 
-      <JobsDrawer
-        open={jobsDrawerOpen}
-        onClose={() => setJobsDrawerOpen(false)}
-        onLoadJobAsSession={handleLoadJob}
-        onConnectJobToSession={handleConnectJob}
-        currentSessionId={sessionId}
-        connectedJobId={connectedJobId}
-        onRefreshActiveSheet={() => fetchSheetData(activeSheet, sheetData?.page || 1)}
-        onOpenSession={handleOpenSession}
-      />
+      {jobsDrawer}
     </Box>
   );
 };

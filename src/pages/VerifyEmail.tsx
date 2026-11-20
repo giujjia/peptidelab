@@ -4,6 +4,7 @@ import { Box, Paper, Typography, Button, CircularProgress, Alert } from '@mui/ma
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { api } from '../services/api';
+import { errorMessage } from '../services/errors';
 
 // Um pedido por token, compartilhado entre montagens; o token e de uso unico no servidor
 const verifications = new Map<string, Promise<void>>();
@@ -49,7 +50,17 @@ export const verifyEmailToken = (token: string) => {
 
 export const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const queryToken = searchParams.get('token');
+  const [token, setToken] = useState<string | null>(() => queryToken);
+
+  useEffect(() => {
+    if (queryToken) {
+      setToken(queryToken);
+      if (window.location.search.includes('token=')) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, [queryToken]);
 
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
@@ -73,7 +84,7 @@ export const VerifyEmail: React.FC = () => {
         if (current) setSuccess(true);
       })
       .catch((err: any) => {
-        if (current) setErrorMsg(err.response?.data?.detail || err.message || 'Failed to verify email token.');
+        if (current) setErrorMsg(errorMessage(err, 'Failed to verify email token.'));
       })
       .finally(() => {
         if (current) setLoading(false);

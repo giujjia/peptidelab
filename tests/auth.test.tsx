@@ -125,10 +125,10 @@ describe('logout e desativacao com falha no servidor (I40, I46)', () => {
       </MemoryRouter>
     );
     fireEvent.click(screen.getByTitle('a@x.org'));
-    fireEvent.click(screen.getByText('Excluir Conta'));
-    fireEvent.click(screen.getByText('Sim, Excluir Minha Conta'));
+    fireEvent.click(screen.getByText('Delete Account'));
+    fireEvent.click(screen.getByText('Yes, Delete My Account'));
     await waitFor(() => expect(screen.getByText('Falha ao desativar')).toBeTruthy());
-    expect(screen.getByText('Confirmar Exclusão de Conta')).toBeTruthy();
+    expect(screen.getByText('Confirm Account Deletion')).toBeTruthy();
     expect(who()).toBe('a@x.org');
   });
 });

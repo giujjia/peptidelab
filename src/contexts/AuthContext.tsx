@@ -39,13 +39,27 @@ const persistIdentity = (token: string | null, u: User | null) => {
   }
 };
 
-const userFromToken = (token: string, email: string): User => {
+const decodeJwtPayload = (token: string): Record<string, any> | null => {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return { id: payload.sub, email };
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    return JSON.parse(atob(padded));
   } catch {
-    return { id: '', email };
+    return null;
   }
+};
+
+const isTokenExpired = (token: string): boolean => {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return true;
+  return Boolean(payload.exp && payload.exp * 1000 < Date.now());
+};
+
+const userFromToken = (token: string, email: string): User => {
+  const payload = decodeJwtPayload(token);
+  return { id: typeof payload?.sub === 'string' ? payload.sub : '', email };
 };
 
 const isValidUser = (u: any): u is User =>
@@ -78,18 +92,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
 
     if (savedToken) {
-      // Valida se o JWT expirou
-      let isExpired = false;
-      try {
-        const payload = JSON.parse(atob(savedToken.split('.')[1]));
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          isExpired = true;
-        }
-      } catch {
-        isExpired = true;
-      }
-
-      if (!isExpired && isValidUser(savedUser)) {
+      if (!isTokenExpired(savedToken) && isValidUser(savedUser)) {
         applyIdentity(savedToken, savedUser);
       } else {
         applyIdentity(null, null);
@@ -116,7 +119,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       } catch {
         token = null;
       }
-      if (!token || !isValidUser(saved)) {
+      if (!token || isTokenExpired(token) || !isValidUser(saved)) {
         setAuthToken(null);
         setSession(null);
         setUser(null);

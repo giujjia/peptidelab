@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { api } from '../services/api';
+import { errorMessage } from '../services/errors';
 import { SheetData } from '../types';
 
 export function useColumnVisibility(
@@ -12,7 +13,6 @@ export function useColumnVisibility(
 ) {
   // Ocultas vem sempre da ultima resposta do servidor para a aba atual, sem estado local paralelo
   const hidden = sheetData ? sheetData.all_columns.filter(c => !sheetData.columns.includes(c)) : [];
-  const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const contextRef = useRef({ sessionId, activeSheet });
   contextRef.current = { sessionId, activeSheet };
@@ -21,7 +21,6 @@ export function useColumnVisibility(
     // Uma alteracao por vez, calculada sobre o estado confirmado
     if (pendingRef.current || !sessionId || !activeSheet) return;
     pendingRef.current = true;
-    setPending(true);
     const origin = { sessionId, activeSheet };
     const sameContext = () =>
       contextRef.current.sessionId === origin.sessionId && contextRef.current.activeSheet === origin.activeSheet;
@@ -37,10 +36,9 @@ export function useColumnVisibility(
       if (sameContext()) setSheetData(res.data.data);
     } catch (err: any) {
       console.error(err);
-      if (sameContext()) notify(err.response?.data?.detail || errorMsg, 'error');
+      if (sameContext()) notify(errorMessage(err, errorMsg), 'error');
     } finally {
       pendingRef.current = false;
-      setPending(false);
     }
   };
 
@@ -51,5 +49,5 @@ export function useColumnVisibility(
 
   const handleHideAll = (allColumns: string[]) => send(allColumns, 'Failed to hide all columns');
 
-  return { hiddenColumns: { [activeSheet]: hidden } as Record<string, string[]>, pending, handleToggleColumn, handleShowAll, handleHideAll };
+  return { hiddenColumns: { [activeSheet]: hidden } as Record<string, string[]>, handleToggleColumn, handleShowAll, handleHideAll };
 }

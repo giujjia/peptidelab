@@ -40,6 +40,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onConnectJob, onDisconnectJob, onFilterClick, onFilterNumericClick, onEsmClick, onIdMappingClick, onCompareClick, onCrossValClick, onResetFilters,
   esmAvailable = true
 }) => {
+  // So Jobs com tabela de relacao podem ser conectados (frameshift nao gera)
+  const connectableJobs = availableJobs.filter(j => j.has_dbpepmutref);
   return (
     <Box sx={{
       width: 220, flexShrink: 0, bgcolor: 'white', borderRight: 1, borderColor: 'divider',
@@ -82,13 +84,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               value=""
               displayEmpty
               onChange={(e) => onConnectJob(e.target.value as string)}
-              disabled={connectingJob || availableJobs.length === 0}
+              disabled={connectingJob || connectableJobs.length === 0}
               sx={{ fontSize: '12px' }}
             >
               <MenuItem value="" disabled>
-                <em>{availableJobs.length === 0 ? 'No jobs available' : 'Select a job...'}</em>
+                <em>{connectableJobs.length === 0 ? 'No jobs available' : 'Select a job...'}</em>
               </MenuItem>
-              {availableJobs.filter(j => j.has_dbpepmutref).map(job => (
+              {connectableJobs.map(job => (
                 <MenuItem key={job.id} value={job.id} sx={{ fontSize: '12px' }}>
                   {job.mutation_type} — {new Date(job.created_at).toLocaleDateString()}
                 </MenuItem>

@@ -19,8 +19,9 @@ vi.mock('../src/components/analysis/UploadScreen', () => ({
   UploadScreen: ({ onUpload }: any) => <button onClick={() => onUpload([new File(['a'], 'a.csv')])}>upload</button>,
 }));
 vi.mock('../src/components/analysis/Sidebar', () => ({
-  Sidebar: ({ onIdMappingClick, onCompareClick, onFilterClick, onDisconnectJob, connectedJobId, connectedJobInfo, filteredDataLength, totalRows }: any) => (
+  Sidebar: ({ onIdMappingClick, onCompareClick, onFilterClick, onConnectJob, onDisconnectJob, connectedJobId, connectedJobInfo, filteredDataLength, totalRows }: any) => (
     <>
+      <button onClick={() => onConnectJob('J2')}>connect</button>
       <button onClick={() => onIdMappingClick(alvo)}>idmap</button>
       <button onClick={() => onCompareClick(alvo)}>compare</button>
       <button onClick={() => onFilterClick(alvo, 'remove-contaminants')}>contaminants</button>
@@ -58,7 +59,7 @@ vi.mock('../src/components/analysis/FilterPopover', () => ({
 vi.mock('../src/components/analysis/JobsDrawer', () => ({
   JobsDrawer: ({ onLoadJobAsSession }: any) => <button onClick={() => onLoadJobAsSession('J1')}>load-job</button>,
 }));
-vi.mock('../src/utils/download', () => ({ downloadBlob: vi.fn() }));
+vi.mock('../src/utils/download', () => ({ downloadBlob: vi.fn(), downloadSessionWorkbook: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../src/components/analysis/IdMappingPopover', () => ({
   IdMappingPopover: ({ anchorEl, onConfirm }: any) =>
     anchorEl ? <button onClick={() => onConfirm({ col_origin: 'k' })}>confirm-idmap</button> : null,
@@ -123,6 +124,7 @@ beforeEach(() => {
       session_id: 'S3', sheets: { a: { columns: ['k', 'x'], row_count: 2 } },
       connected_job_id: 'J1', connected_job_info: { mutation_type: 'missense', dbpepmutref_rows: 2 },
     } };
+    if (url === '/analysis/connect-job') return { data: { mutation_type: 'indel', dbpepmutref_rows: 3 } };
     if (url === '/analysis/disconnect-job') {
       if (estado.toggleFalha) throw Object.assign(new Error('falhou'), { response: { status: 500, data: { detail: 'Falha ao desconectar' } } });
       return { data: { success: true } };
@@ -362,5 +364,48 @@ describe('colunas com busca ativa (F04)', () => {
     await esperar(50);
     const ultimo = apiMock.post.mock.calls.filter(c => c[0] === '/analysis/toggle-columns').pop()!;
     expect(ultimo[1]).toMatchObject({ session_id: 'S1', search: 'PEPTIDE_TWO', page: 1 });
+  });
+});
+
+describe('Job da sessao anterior depois do New Analysis (C21, V25)', () => {
+  const novaSessao = async () => {
+    fireEvent.click(screen.getByText('new'));
+    await waitFor(() => expect(screen.getByText('upload')).toBeTruthy());
+    await abrirSessao();
+    await esperar(50);
+  };
+
+  it('conexao atrasada da sessao A nao marca o Job na sessao B', async () => {
+    const liberar = deferred<void>();
+    estado.atrasos['/analysis/connect-job'] = liberar.promise;
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('connect'));
+    await novaSessao();
+    await act(async () => {
+      liberar.resolve();
+      await liberar.promise;
+    });
+    await esperar(50);
+    expect(screen.getByTestId('job').textContent).toBe('|');
+    expect(notify).not.toHaveBeenCalledWith('Job connected to active session successfully!', 'success');
+  });
+
+  it('desconexao atrasada da sessao A nao desfaz a conexao da sessao B', async () => {
+    const liberar = deferred<void>();
+    estado.atrasos['/analysis/disconnect-job'] = liberar.promise;
+    render(<AnalysisTool />);
+    await abrirSessao();
+    fireEvent.click(screen.getByText('disconnect'));
+    await novaSessao();
+    fireEvent.click(screen.getByText('connect'));
+    await waitFor(() => expect(screen.getByTestId('job').textContent).toBe('J2|indel'));
+    await act(async () => {
+      liberar.resolve();
+      await liberar.promise;
+    });
+    await esperar(50);
+    expect(screen.getByTestId('job').textContent).toBe('J2|indel');
+    expect(notify).not.toHaveBeenCalledWith('Job disconnected', 'info');
   });
 });

@@ -39,10 +39,10 @@ export const Register: React.FC = () => {
     setError('');
     try {
       const res = await api.post('/auth/resend-verification', { email: pendingEmail });
-      setSuccessMsg(res.data?.message || 'Se houver uma conta pendente de verificação, enviaremos uma nova mensagem.');
+      setSuccessMsg(res.data?.message || 'If an unverified account exists for this email, a new verification message will be sent.');
       setPendingEmail('');
     } catch (err: any) {
-      setError(errorMessage(err, 'Não foi possível reenviar agora. Tente novamente em alguns minutos.'));
+      setError(errorMessage(err, 'Could not resend right now. Please try again in a few minutes.'));
     } finally {
       setResending(false);
     }
@@ -56,9 +56,9 @@ export const Register: React.FC = () => {
       const res = await registerAccount(data.email, data.password);
       if (res && res.is_verified === false && res.verification_email_sent === false) {
         setPendingEmail(data.email);
-        setSuccessMsg('Conta criada, mas não conseguimos enviar o e-mail de verificação agora. Use o botão abaixo para reenviar em alguns minutos.');
+        setSuccessMsg('Account created, but we could not send the verification email right now. Use the button below to resend in a few minutes.');
       } else if (res && res.is_verified === false) {
-        setSuccessMsg('Conta criada com sucesso! Um e-mail de verificação foi enviado para o seu endereço. Por favor, confirme seu e-mail para acessar.');
+        setSuccessMsg('Account created successfully! A verification email has been sent to your address. Please confirm your email to sign in.');
       } else {
         navigate('/');
       }
@@ -96,7 +96,7 @@ export const Register: React.FC = () => {
               sx={{ mb: 2 }}
               action={pendingEmail ? (
                 <Button color="inherit" size="small" onClick={handleResend} disabled={resending}>
-                  Reenviar
+                  Resend
                 </Button>
               ) : undefined}
             >

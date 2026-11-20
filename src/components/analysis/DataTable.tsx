@@ -7,6 +7,8 @@ interface DataTableProps {
   data: Record<string, any>[];
 }
 
+const UNIPROT_ACCESSION = /^[OPQ][0-9][A-Z0-9]{3}[0-9]$|^[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}$/;
+
 const renderCellValue = (col: string, val: any) => {
   if (val === null || val === undefined) return '';
   const strVal = String(val).trim();
@@ -43,19 +45,22 @@ const renderCellValue = (col: string, val: any) => {
     );
   }
 
-  // UniProtKB Accession (e.g. P04637 or A0A024RBG1)
-  const isUniProtAcc = /^[OPQ][0-9A-Z]{5}$|^[A-N,R-Z][0-9][A-Z][A-Z0-9]{3}[0-9]$/.test(strVal);
-  if (isUniProtAcc || col === 'UniProt_ID') {
-    return (
-      <Link
-        href={`https://www.uniprot.org/uniprotkb/${strVal}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        sx={{ color: '#9c27b0', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}
-      >
-        {strVal}
-      </Link>
-    );
+  // UniProtKB Accession (e.g. P04637 or A0A024RBG1); a celula pode listar varios separados por |
+  const accessions = strVal.split('|').map(a => a.trim()).filter(Boolean);
+  if (accessions.length > 0 && (col === 'UniProt_ID' || accessions.every(a => UNIPROT_ACCESSION.test(a)))) {
+    return accessions.map((acc, i) => (
+      <React.Fragment key={acc + i}>
+        {i > 0 && ' | '}
+        <Link
+          href={`https://www.uniprot.org/uniprotkb/${encodeURIComponent(acc)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ color: '#9c27b0', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}
+        >
+          {acc}
+        </Link>
+      </React.Fragment>
+    ));
   }
 
   return strVal;

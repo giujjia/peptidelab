@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { errorMessage } from '../services/errors';
 import {
   AppBar,
   Toolbar,
@@ -131,7 +132,7 @@ export const Layout: React.FC = () => {
                     color: 'white',
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
                   }}
-                  title={user?.email || 'Minha Conta'}
+                  title={user?.email || 'My Account'}
                 >
                   <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: '14px', fontWeight: 600 }}>
                     {userInitial}
@@ -158,7 +159,7 @@ export const Layout: React.FC = () => {
                   {user?.email && (
                     <Box sx={{ px: 2, py: 1 }}>
                       <Typography variant="caption" color="text.secondary" display="block">
-                        Conectado como
+                        Signed in as
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-all' }}>
                         {user.email}
@@ -170,14 +171,14 @@ export const Layout: React.FC = () => {
                     <ListItemIcon>
                       <LogoutIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText primary="Sair (Logout)" />
+                    <ListItemText primary="Sign Out" />
                   </MenuItem>
                   <Divider />
                   <MenuItem onClick={handleOpenDelete} sx={{ color: 'error.main' }}>
                     <ListItemIcon>
                       <DeleteForeverIcon fontSize="small" color="error" />
                     </ListItemIcon>
-                    <ListItemText primary="Excluir Conta" />
+                    <ListItemText primary="Delete Account" />
                   </MenuItem>
                 </Menu>
               </>
@@ -195,15 +196,15 @@ export const Layout: React.FC = () => {
 
       {/* Confirmation Modal for Account Deletion */}
       <Dialog open={confirmDeleteOpen} onClose={() => !deleting && setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>Confirmar Exclusão de Conta</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>Confirm Account Deletion</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Sua conta será desativada imediatamente. Se você entrar de novo em até <strong>60 dias</strong>, ela é reativada. Depois desse prazo, a conta, os jobs, as tarefas de análise e os registros de e-mail ligados a ela são <strong>apagados definitivamente</strong>.
+            Your account will be deactivated immediately. If you sign in again within <strong>60 days</strong>, it will be reactivated. After that period, your account, jobs, analysis tasks, and associated email records will be <strong>permanently deleted</strong>.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setConfirmDeleteOpen(false)} color="inherit" disabled={deleting} sx={{ textTransform: 'none' }}>
-            Cancelar
+            Cancel
           </Button>
           <Button
             onClick={async () => {
@@ -211,11 +212,11 @@ export const Layout: React.FC = () => {
               try {
                 await deleteAccount();
                 setConfirmDeleteOpen(false);
-                notify('Conta desativada.', 'success');
+                notify('Account deactivated.', 'success');
                 navigate('/login');
               } catch (err: any) {
-                // Dialogo continua aberto: a conta segue ativa
-                notify(err?.response?.data?.detail || 'Não foi possível confirmar a desativação. Sua conta continua ativa.', 'error');
+                // Dialog stays open while the account remains active
+                notify(errorMessage(err, 'Could not confirm deactivation. Your account remains active.'), 'error');
               } finally {
                 setDeleting(false);
               }
@@ -225,7 +226,7 @@ export const Layout: React.FC = () => {
             disabled={deleting}
             sx={{ textTransform: 'none' }}
           >
-            {deleting ? 'Excluindo...' : 'Sim, Excluir Minha Conta'}
+            {deleting ? 'Deleting...' : 'Yes, Delete My Account'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -242,7 +243,7 @@ export const Layout: React.FC = () => {
         borderTop: '1px solid rgba(255,255,255,0.1)'
       }}>
         <Typography variant="body2">
-          © 2026 <Link href="https://www.unir.br" target="_blank" rel="noreferrer" sx={{ color: 'white', textDecoration: 'none', fontWeight: 600 }}>UNIR</Link> — All Rights Reserved
+          © 2026 <Link href="https://www.unir.br" target="_blank" rel="noopener noreferrer" sx={{ color: 'white', textDecoration: 'none', fontWeight: 600 }}>UNIR</Link> — All Rights Reserved
         </Typography>
       </Box>
     </Box>

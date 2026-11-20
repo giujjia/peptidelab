@@ -10,8 +10,8 @@ This repository contains the PeptideLab frontend application, which communicates
 
 ### Peptide Processor
 
-- Processes variants from text input or CSV and Excel files.
-- Supports missense, indel, frameshift, and silent variants.
+- Processes variants from text input or plain text files (.txt, .tsv, .csv).
+- Supports missense, indel, frameshift, and stop-loss variants.
 - Retrieves reference protein sequences.
 - Reconstructs variant-containing protein sequences.
 - Generates variant-derived peptides and proteomic search resources.
@@ -52,6 +52,19 @@ PeptideLab uses a Python backend based on:
 - **PostgreSQL**
 
 The frontend communicates with the backend through a REST API.
+
+## Development
+
+```bash
+npm ci
+cp .env.example .env    # VITE_API_URL points to the backend API
+npm run dev             # development server
+npm test                # component tests (vitest)
+npm run lint
+npm run build           # type checks and production build
+```
+
+The `Dockerfile` builds the app with `VITE_API_URL=/api/v1` and serves it with Nginx on port 80; the API is expected under `/api` on the same domain.
 
 ## Frontend Structure
 

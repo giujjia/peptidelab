@@ -109,7 +109,5 @@ async function request(method: string, endpoint: string, data?: any, config: Api
 export const api = {
   get: (url: string, config?: ApiConfig) => request('GET', url, undefined, config),
   post: (url: string, data?: any, config?: ApiConfig) => request('POST', url, data, config),
-  put: (url: string, data?: any, config?: ApiConfig) => request('PUT', url, data, config),
-  patch: (url: string, data?: any, config?: ApiConfig) => request('PATCH', url, data, config),
   delete: (url: string, config?: ApiConfig) => request('DELETE', url, undefined, config),
 };

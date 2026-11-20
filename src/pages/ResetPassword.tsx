@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Box, Paper, Typography, TextField, Button, Alert } from '@mui/material';
 import { api } from '../services/api';
@@ -9,7 +9,17 @@ import { passwordLength, PASSWORD_MIN_LENGTH } from '../services/accountRules';
 // Destino do link enviado por e-mail na recuperacao de senha
 export const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token') || '';
+  const queryToken = searchParams.get('token');
+  const [token, setToken] = useState(() => queryToken || '');
+
+  useEffect(() => {
+    if (queryToken) {
+      setToken(queryToken);
+      if (window.location.search.includes('token=')) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, [queryToken]);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);

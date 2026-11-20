@@ -272,7 +272,7 @@ export const JobsList: React.FC<JobsListProps> = ({
       <Box sx={{ p: 1.5, borderTop: 1, borderColor: 'divider', bgcolor: 'background.default', textAlign: 'center' }}>
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '11px' }}>
           {tabIndex === 0
-            ? 'Storage limit: 200 MB per user. Results files are automatically stored for up to 60 days.'
+            ? 'Storage limit: up to 50 jobs (200 MB) per user. Result files are automatically removed after 14 days.'
             : 'Analysis sessions with results are kept for 24 hours after the task finishes.'}
         </Typography>
       </Box>

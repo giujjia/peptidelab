@@ -54,6 +54,7 @@ export interface AsyncTaskItem {
   id: string;
   task_type: string;
   session_id: string;
+  session_available?: boolean;
   status: string;
   progress: number;
   total: number;

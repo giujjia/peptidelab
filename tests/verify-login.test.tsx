@@ -87,32 +87,24 @@ describe('recuperacao de senha (I45)', () => {
   const preencher = (label: string, valor: string) =>
     fireEvent.change(screen.getByLabelText(label), { target: { value: valor } });
 
-  it('timer de fechamento do fluxo anterior nao fecha nem limpa o fluxo reaberto', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+  it('envia link de recuperacao e exibe confirmacao clara sem pedir codigo manual', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = urlOf(input);
       if (url.endsWith('/auth/forgot-password')) return Promise.resolve(jsonResponse(200, { message: 'ok' }));
-      if (url.endsWith('/auth/reset-password')) return Promise.resolve(jsonResponse(200, { message: 'ok' }));
       return Promise.resolve(jsonResponse(200, {}));
     });
     render(<MemoryRouter><AuthProvider><Login /></AuthProvider></MemoryRouter>);
 
     fireEvent.click(screen.getByText('Forgot password?'));
     preencher('Account Email Address', 'a@x.org');
-    fireEvent.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByLabelText('Reset Token Code')).toBeTruthy());
-    preencher('Reset Token Code', 'codigo');
-    preencher('New Password', 'nova-senha');
-    fireEvent.click(screen.getByText('Set New Password'));
-    await waitFor(() => expect(screen.getByText('Password reset successfully! You can now log in.')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reset Link' }));
+    await waitFor(() => expect(screen.getByText(/we sent a password reset link/i)).toBeTruthy());
+    expect(screen.queryByLabelText('Reset Token Code')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    // Usuario fecha e reabre antes do fechamento automatico
-    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByText('Forgot password?'));
-    preencher('Account Email Address', 'outro@x.org');
-
-    await act(() => new Promise(r => setTimeout(r, 1700)));
-    expect(screen.getByText('Reset Password')).toBeTruthy();
-    expect((screen.getByLabelText('Account Email Address') as HTMLInputElement).value).toBe('outro@x.org');
+    expect(screen.getByLabelText('Account Email Address')).toBeTruthy();
   });
 
   it('resposta de pedido de fluxo fechado nao altera o fluxo reaberto', async () => {
@@ -122,16 +114,16 @@ describe('recuperacao de senha (I45)', () => {
 
     fireEvent.click(screen.getByText('Forgot password?'));
     preencher('Account Email Address', 'a@x.org');
-    fireEvent.click(screen.getByText('Next'));
-    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reset Link' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     fireEvent.click(screen.getByText('Forgot password?'));
 
     await act(async () => {
       pedido.resolve(jsonResponse(200, { message: 'ok' }));
       await pedido.promise;
     });
-    // Fluxo novo continua na primeira etapa e sem mensagem do pedido antigo
-    expect(screen.queryByText('If an account exists, we sent a reset link to this email. Open the link, or paste the code from it below.')).toBeNull();
-    expect(screen.queryByLabelText('Reset Token Code')).toBeNull();
+    // Fluxo novo continua no formulario de e-mail e sem confirmacao do pedido antigo
+    expect(screen.queryByText(/we sent a password reset link/i)).toBeNull();
+    expect(screen.getByLabelText('Account Email Address')).toBeTruthy();
   });
 });

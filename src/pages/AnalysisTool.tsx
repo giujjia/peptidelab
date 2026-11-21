@@ -3,6 +3,7 @@ import { Box, Typography, Dialog, DialogTitle, DialogContent, DialogActions, But
 import { api } from '../services/api';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useJobsDrawer, useRegisterAnalysisDrawer } from '../contexts/JobsDrawerContext';
 import { FilterPopover } from '../components/analysis/FilterPopover';
 import { EsmPopover } from '../components/analysis/EsmPopover';
 import { IdMappingPopover } from '../components/analysis/IdMappingPopover';
@@ -41,6 +42,7 @@ export const AnalysisTool: React.FC = () => {
   const prevIdentityRef = useRef<string | null | undefined>(undefined);
   
   const [availableJobs, setAvailableJobs] = useState<AvailableJob[]>([]);
+  const jobsDrawerCtx = useJobsDrawer();
   const [jobsDrawerOpen, setJobsDrawerOpen] = useState(false);
 
   const fetchJobs = useCallback(async () => {
@@ -298,22 +300,34 @@ export const AnalysisTool: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Link do email traz ?session_id=; abre depois que a autenticacao foi restaurada
+  // Link do email ou do drawer global traz ?session_id= ou ?job_id=
   const sessionFromLinkRef = useRef(false);
   useEffect(() => {
     if (authLoading || sessionFromLinkRef.current) return;
-    sessionFromLinkRef.current = true;
     const params = new URLSearchParams(window.location.search);
     const linkSessionId = params.get('session_id');
-    if (!linkSessionId) return;
+    const linkJobId = params.get('job_id');
+    if (!linkSessionId && !linkJobId) return;
+    sessionFromLinkRef.current = true;
     params.delete('session_id');
+    params.delete('job_id');
     const qs = params.toString();
     window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''));
-    if (!SAFE_SESSION_ID.test(linkSessionId)) {
-      notify('Invalid session link', 'error');
+    if (linkSessionId) {
+      if (!SAFE_SESSION_ID.test(linkSessionId)) {
+        notify('Invalid session link', 'error');
+        return;
+      }
+      handleOpenSession(linkSessionId);
       return;
     }
-    handleOpenSession(linkSessionId);
+    if (linkJobId) {
+      if (!SAFE_SESSION_ID.test(linkJobId)) {
+        notify('Invalid job link', 'error');
+        return;
+      }
+      handleLoadJob(linkJobId);
+    }
   }, [authLoading, handleOpenSession, notify]);
 
   // Limpa workspace e tarefas quando a identidade muda (logout ou troca de conta em outra aba)
@@ -545,6 +559,11 @@ export const AnalysisTool: React.FC = () => {
     margin_percentage: number;
     higher_is_better: boolean;
     classification_threshold: number;
+    classification_col?: string;
+    ppm_col?: string;
+    peaks_col?: string;
+    peptide_col?: string;
+    protein_col?: string;
   }) => {
     if (crossValStarting) return;
     setCrossValAnchorEl(null);
@@ -593,7 +612,19 @@ export const AnalysisTool: React.FC = () => {
     }
   };
 
-  const jobsDrawer = (
+  useRegisterAnalysisDrawer({
+    onLoadJobAsSession: handleLoadJob,
+    onConnectJobToSession: handleConnectJob,
+    currentSessionId: sessionId,
+    connectedJobId,
+    onRefreshActiveSheet: () => fetchSheetData(activeSheet, sheetData?.page || 1),
+    onOpenSession: handleOpenSession,
+  });
+
+  const openJobsDrawer = () => (jobsDrawerCtx ? jobsDrawerCtx.openDrawer() : setJobsDrawerOpen(true));
+
+  // Fallback local quando AnalysisTool e montada fora do JobsDrawerProvider (ex: testes isolados)
+  const jobsDrawer = jobsDrawerCtx ? null : (
     <JobsDrawer
       open={jobsDrawerOpen}
       onClose={() => setJobsDrawerOpen(false)}
@@ -614,7 +645,7 @@ export const AnalysisTool: React.FC = () => {
           onUpload={handleUpload} 
           onLoadExample={handleLoadExample}
           onLoadCompareExample={handleLoadCompareExample}
-          onOpenJobsDrawer={() => setJobsDrawerOpen(true)}
+          onOpenJobsDrawer={openJobsDrawer}
         />
         {jobsDrawer}
       </>
@@ -669,7 +700,6 @@ export const AnalysisTool: React.FC = () => {
           onDownload={handleDownload}
           onNewAnalysis={handleNewAnalysis}
           onDeleteSession={() => setConfirmDeleteSession(true)}
-          onOpenJobsDrawer={() => setJobsDrawerOpen(true)}
           onImportFiles={handleImportFiles}
         />
 

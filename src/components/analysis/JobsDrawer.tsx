@@ -393,59 +393,67 @@ export const JobsDrawer: React.FC<JobsDrawerProps> = ({
                     </Typography>
 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      {t.status === 'done' && (
-                        <Button
-                          size="small"
-                          variant="text"
-                          color="primary"
-                          startIcon={<DownloadIcon sx={{ fontSize: '15px !important' }} />}
-                          disabled={loadingActions.has(`${t.id}:download`)}
-                          onClick={async () => {
-                            const key = `${t.id}:download`;
-                            setActionBusy(key, true);
-                            try {
-                              await downloadSessionWorkbook(t.session_id);
-                            } catch (err: any) {
-                              notify(errorMessage(err, 'Session expired or file unavailable'), 'error');
-                            } finally {
-                              setActionBusy(key, false);
-                            }
-                          }}
-                          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
-                        >
-                          Download (.xlsx)
-                        </Button>
-                      )}
-                      {onOpenSession && currentSessionId !== t.session_id && (
-                        <Button
-                          size="small"
-                          variant="text"
-                          color="primary"
-                          disabled={loadingActions.has(t.id)}
-                          onClick={async () => {
-                            setActionBusy(t.id, true);
-                            try {
-                              const ok = await onOpenSession(t.session_id);
-                              if (ok !== false) onClose();
-                            } finally {
-                              setActionBusy(t.id, false);
-                            }
-                          }}
-                          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
-                        >
-                          Open Session
-                        </Button>
-                      )}
-                      {t.status === 'done' && onRefreshActiveSheet && currentSessionId === t.session_id && (
-                        <Button
-                          size="small"
-                          variant="text"
-                          color="primary"
-                          onClick={onRefreshActiveSheet}
-                          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
-                        >
-                          Reload Active Sheet
-                        </Button>
+                      {t.session_available === false ? (
+                        <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                          Session expired
+                        </Typography>
+                      ) : (
+                        <>
+                          {t.status === 'done' && (
+                            <Button
+                              size="small"
+                              variant="text"
+                              color="primary"
+                              startIcon={<DownloadIcon sx={{ fontSize: '15px !important' }} />}
+                              disabled={loadingActions.has(`${t.id}:download`)}
+                              onClick={async () => {
+                                const key = `${t.id}:download`;
+                                setActionBusy(key, true);
+                                try {
+                                  await downloadSessionWorkbook(t.session_id);
+                                } catch (err: any) {
+                                  notify(errorMessage(err, 'Session expired or file unavailable'), 'error');
+                                } finally {
+                                  setActionBusy(key, false);
+                                }
+                              }}
+                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                            >
+                              Download (.xlsx)
+                            </Button>
+                          )}
+                          {onOpenSession && currentSessionId !== t.session_id && (
+                            <Button
+                              size="small"
+                              variant="text"
+                              color="primary"
+                              disabled={loadingActions.has(t.id)}
+                              onClick={async () => {
+                                setActionBusy(t.id, true);
+                                try {
+                                  const ok = await onOpenSession(t.session_id);
+                                  if (ok !== false) onClose();
+                                } finally {
+                                  setActionBusy(t.id, false);
+                                }
+                              }}
+                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                            >
+                              Open Session
+                            </Button>
+                          )}
+                          {t.status === 'done' && onRefreshActiveSheet && currentSessionId === t.session_id && (
+                            <Button
+                              size="small"
+                              variant="text"
+                              color="primary"
+                              onClick={onRefreshActiveSheet}
+                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', p: 0 }}
+                            >
+                              Reload Active Sheet
+                            </Button>
+                          )}
+                        </>
                       )}
                     </Box>
                   </Box>

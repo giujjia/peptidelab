@@ -42,6 +42,7 @@ describe('textos de conta e de apresentacao', () => {
     );
     fireEvent.click(screen.getByTitle('a@x.org'));
     expect(screen.getByText('Signed in as')).toBeTruthy();
+    expect(screen.getByText('My Jobs')).toBeTruthy();
     expect(screen.getByText('Sign Out')).toBeTruthy();
     fireEvent.click(screen.getByText('Delete Account'));
     const text = screen.getByText(/Your account will be deactivated immediately/).textContent || '';

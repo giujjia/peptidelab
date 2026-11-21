@@ -3,7 +3,6 @@ import { Box, Typography, Button, TextField, InputAdornment, Popover, Divider, F
 import SearchIcon from '@mui/icons-material/Search';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import DownloadIcon from '@mui/icons-material/Download';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -45,7 +44,7 @@ const headerOutlinedButtonSx = {
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   sheetName, totalRows, searchQuery, setSearchQuery,
   filteredColumns, hiddenColumns, onToggleColumn, onShowAllColumns, onHideAllColumns,
-  onDownload, onNewAnalysis, onDeleteSession, onOpenJobsDrawer, onImportFiles
+  onDownload, onNewAnalysis, onDeleteSession, onImportFiles
 }) => {
   const [colAnchor, setColAnchor] = useState<null | HTMLElement>(null);
   const [columnSearch, setColumnSearch] = useState('');
@@ -109,18 +108,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               Import File
             </Button>
           </>
-        )}
-
-        {onOpenJobsDrawer && (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<FolderOpenIcon />}
-            onClick={onOpenJobsDrawer}
-            sx={headerOutlinedButtonSx}
-          >
-            My Jobs
-          </Button>
         )}
 
         <Button

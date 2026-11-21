@@ -107,6 +107,8 @@ export const JobForm: React.FC<JobFormProps> = ({
             </Button>
           </Box>
           <TextField
+            id="mutation-input"
+            name="mutationInput"
             multiline
             rows={4}
             fullWidth

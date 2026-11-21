@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   Popover, Button, FormControl, InputLabel, Select, MenuItem,
-  Typography, Box, Alert, TextField, FormControlLabel, Checkbox
+  Typography, Box, Alert, TextField, FormControlLabel, Checkbox, Divider
 } from '@mui/material';
 import { SheetInfo } from '../../types';
+
+const findAlias = (cols: string[], aliases: string[]) => {
+  const map = new Map(cols.map(c => [c.toLowerCase(), c]));
+  for (const alias of aliases) {
+    const hit = map.get(alias);
+    if (hit) return hit;
+  }
+  return '';
+};
 
 interface CrossValPopoverProps {
   anchorEl: HTMLElement | null;
@@ -17,6 +26,11 @@ interface CrossValPopoverProps {
     margin_percentage: number;
     higher_is_better: boolean;
     classification_threshold: number;
+    classification_col?: string;
+    ppm_col?: string;
+    peaks_col?: string;
+    peptide_col?: string;
+    protein_col?: string;
   }) => void;
   sheets: string[];
   activeSheet: string;
@@ -35,6 +49,11 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
   const [higherIsBetter, setHigherIsBetter] = useState<boolean>(true);
   // Limiar absoluto do score alvo (tau), na escala da coluna de score escolhida
   const [threshold, setThreshold] = useState<string>('0.95');
+  const [classificationCol, setClassificationCol] = useState('');
+  const [ppmCol, setPpmCol] = useState('');
+  const [peaksCol, setPeaksCol] = useState('');
+  const [peptideCol, setPeptideCol] = useState('');
+  const [proteinCol, setProteinCol] = useState('');
 
   const [colunasEmComum, setColunasEmComum] = useState<string[]>([]);
 
@@ -49,10 +68,15 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
       setMargin(20);
       setHigherIsBetter(true);
       setThreshold('0.95');
+      setClassificationCol('');
+      setPpmCol('');
+      setPeaksCol('');
+      setPeptideCol('');
+      setProteinCol('');
     }
   }, [anchorEl, activeSheet]);
 
-  // Calcula interseção das colunas ao alterar as abas selecionadas
+  // Calcula intersecao das colunas e auto-detecta criterios opcionais ao alterar as abas
   useEffect(() => {
     if (sheetA && sheetB && sheetsInfo[sheetA] && sheetsInfo[sheetB]) {
       const colsA = sheetsInfo[sheetA].columns || [];
@@ -63,11 +87,21 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
       
       setScoreColA(prev => (colsA.includes(prev) ? prev : ''));
       setScoreColB(prev => (colsB.includes(prev) ? prev : ''));
+      setClassificationCol(findAlias(colsB, ['classificationscore', 'classification_score']));
+      setPpmCol(findAlias(comuns, ['ppm_orbitrap', 'ppm', 'ppm_error', 'mass_error_ppm', 'error_ppm']));
+      setPeaksCol(findAlias(comuns, ['peaksmatched', 'peaks_matched', 'peaks', 'matched_peaks']));
+      setPeptideCol(findAlias(comuns, ['peptidesequence', 'sequence', 'peptide', 'seq']));
+      setProteinCol(findAlias(comuns, ['theproteinlocci', 'protein_id', 'locus', 'proteins']));
     } else {
       setColunasEmComum([]);
       setJoinKeys([]);
       setScoreColA('');
       setScoreColB('');
+      setClassificationCol('');
+      setPpmCol('');
+      setPeaksCol('');
+      setPeptideCol('');
+      setProteinCol('');
     }
   }, [sheetA, sheetB, sheetsInfo]);
 
@@ -202,9 +236,88 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
           value={threshold}
           onChange={e => setThreshold(e.target.value)}
           error={!thresholdValido}
-          helperText="Target score must be above (or below) this value, in the score column's own scale"
+          helperText={classificationCol ? `Applied to ${classificationCol} (R2)` : "Applied to Target Score (R2)"}
           inputProps={{ step: 0.01 }}
         />
+
+        {sheetA && sheetB && (
+          <>
+            <Divider sx={{ my: 0.5 }} />
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>
+              Additional Criteria (Optional)
+            </Typography>
+
+            <FormControl fullWidth size="small">
+              <InputLabel>Classification Column (tau)</InputLabel>
+              <Select
+                value={classificationCol}
+                label="Classification Column (tau)"
+                onChange={(e) => setClassificationCol(e.target.value)}
+              >
+                <MenuItem value=""><em>Use Target Score</em></MenuItem>
+                {(sheetsInfo[sheetB]?.columns || []).map(col => (
+                  <MenuItem key={col} value={col}>{col}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size="small" disabled={colunasEmComum.length === 0}>
+              <InputLabel>Peptide Sequence (R2 != R1)</InputLabel>
+              <Select
+                value={peptideCol}
+                label="Peptide Sequence (R2 != R1)"
+                onChange={(e) => setPeptideCol(e.target.value)}
+              >
+                <MenuItem value=""><em>None (skip)</em></MenuItem>
+                {colunasEmComum.map(col => (
+                  <MenuItem key={col} value={col}>{col}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size="small" disabled={colunasEmComum.length === 0}>
+              <InputLabel>Peaks Matched (R2 &gt;= R1)</InputLabel>
+              <Select
+                value={peaksCol}
+                label="Peaks Matched (R2 >= R1)"
+                onChange={(e) => setPeaksCol(e.target.value)}
+              >
+                <MenuItem value=""><em>None (skip)</em></MenuItem>
+                {colunasEmComum.map(col => (
+                  <MenuItem key={col} value={col}>{col}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size="small" disabled={colunasEmComum.length === 0}>
+              <InputLabel>Mass Error / PPM (|R2| &lt;= |R1|)</InputLabel>
+              <Select
+                value={ppmCol}
+                label="Mass Error / PPM (|R2| <= |R1|)"
+                onChange={(e) => setPpmCol(e.target.value)}
+              >
+                <MenuItem value=""><em>None (skip)</em></MenuItem>
+                {colunasEmComum.map(col => (
+                  <MenuItem key={col} value={col}>{col}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size="small" disabled={colunasEmComum.length === 0}>
+              <InputLabel>Protein Locus (overlap)</InputLabel>
+              <Select
+                value={proteinCol}
+                label="Protein Locus (overlap)"
+                onChange={(e) => setProteinCol(e.target.value)}
+              >
+                <MenuItem value=""><em>None (skip)</em></MenuItem>
+                {colunasEmComum.map(col => (
+                  <MenuItem key={col} value={col}>{col}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </>
+        )}
 
         <Button
           variant="contained"
@@ -216,7 +329,12 @@ export const CrossValPopover: React.FC<CrossValPopoverProps> = ({
             score_col_b: scoreColB,
             margin_percentage: margin,
             higher_is_better: higherIsBetter,
-            classification_threshold: Number(threshold)
+            classification_threshold: Number(threshold),
+            classification_col: classificationCol,
+            ppm_col: ppmCol,
+            peaks_col: peaksCol,
+            peptide_col: peptideCol,
+            protein_col: proteinCol,
           })}
           disabled={!pronto}
           fullWidth

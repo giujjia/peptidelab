@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { useJobsDrawer } from '../contexts/JobsDrawerContext';
+import { JobsDrawer } from './analysis/JobsDrawer';
 import { errorMessage } from '../services/errors';
 import {
   AppBar,
@@ -24,15 +26,44 @@ import {
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
 export const Layout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, user, logout, deleteAccount } = useAuth();
+  const jobsDrawerCtx = useJobsDrawer();
+  const [localDrawerOpen, setLocalDrawerOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const { notify } = useNotification();
+
+  const drawerOpen = jobsDrawerCtx ? jobsDrawerCtx.open : localDrawerOpen;
+  const openJobsDrawer = () => (jobsDrawerCtx ? jobsDrawerCtx.openDrawer() : setLocalDrawerOpen(true));
+  const closeJobsDrawer = () => (jobsDrawerCtx ? jobsDrawerCtx.closeDrawer() : setLocalDrawerOpen(false));
+  const drawerHandlers = jobsDrawerCtx?.handlers ?? null;
+
+  const handleOpenMyJobs = () => {
+    handleCloseMenu();
+    openJobsDrawer();
+  };
+
+  const handleLoadJobFromDrawer = async (jobId: string) => {
+    if (drawerHandlers) {
+      return drawerHandlers.onLoadJobAsSession(jobId);
+    }
+    navigate(`/analysis?job_id=${encodeURIComponent(jobId)}`);
+    return true;
+  };
+
+  const handleOpenSessionFromDrawer = async (sessionId: string) => {
+    if (drawerHandlers?.onOpenSession) {
+      return drawerHandlers.onOpenSession(sessionId);
+    }
+    navigate(`/analysis?session_id=${encodeURIComponent(sessionId)}`);
+    return true;
+  };
 
   const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -167,6 +198,12 @@ export const Layout: React.FC = () => {
                     </Box>
                   )}
                   <Divider />
+                  <MenuItem onClick={handleOpenMyJobs}>
+                    <ListItemIcon>
+                      <FolderOpenIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="My Jobs" />
+                  </MenuItem>
                   <MenuItem onClick={handleLogout}>
                     <ListItemIcon>
                       <LogoutIcon fontSize="small" />
@@ -233,6 +270,18 @@ export const Layout: React.FC = () => {
       <Box component="main" sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
+      {isAuthenticated && (
+        <JobsDrawer
+          open={drawerOpen}
+          onClose={closeJobsDrawer}
+          onLoadJobAsSession={handleLoadJobFromDrawer}
+          onConnectJobToSession={drawerHandlers?.onConnectJobToSession}
+          currentSessionId={drawerHandlers?.currentSessionId}
+          connectedJobId={drawerHandlers?.connectedJobId}
+          onRefreshActiveSheet={drawerHandlers?.onRefreshActiveSheet}
+          onOpenSession={handleOpenSessionFromDrawer}
+        />
+      )}
       <Box component="footer" sx={{
         py: 2,
         px: 2,

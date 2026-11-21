@@ -51,6 +51,7 @@ export const Dashboard: React.FC = () => {
         <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
           <Typography
             variant="h3"
+            component="h1"
             sx={{
               fontWeight: 700,
               color: "white",
@@ -110,7 +111,7 @@ export const Dashboard: React.FC = () => {
       {/* Features */}
       <Box sx={{ bgcolor: 'background.default', py: 6, px: 4 }}>
         <Container maxWidth="lg">
-          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: "-.3px", mb: 0.5 }}>
+          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, letterSpacing: "-.3px", mb: 0.5 }}>
             Main Features
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4 }}>
@@ -165,8 +166,8 @@ export const Dashboard: React.FC = () => {
                 <LoginIcon sx={{ color: 'primary.main', fontSize: 32 }} />
               </Box>
               <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>Save your processing history</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mb: 0.5 }}>Save your processing history</Typography>
+                <Typography variant="body2" color="text.primary">
                   Sign in to keep track of all your Peptide Processor jobs and access your previous results anytime.
                 </Typography>
               </Box>

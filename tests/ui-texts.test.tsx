@@ -10,6 +10,8 @@ import { About } from '../src/pages/About';
 import { EsmPopover } from '../src/components/analysis/EsmPopover';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { NotificationProvider } from '../src/contexts/NotificationContext';
+import { JobsDrawerProvider } from '../src/contexts/JobsDrawerContext';
+import { AppRoutes } from '../src/routes';
 import { jwt } from './helpers';
 
 beforeEach(() => {
@@ -134,5 +136,26 @@ describe('textos de conta e de apresentacao', () => {
     expect(screen.getByText(/limited to 200 rows per run/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Limit: 200 Rows' })).toHaveProperty('disabled', true);
     anchor.remove();
+  });
+
+  it('navigates away from /analysis to /dashboard and /about under JobsDrawerProvider', () => {
+    render(
+      <NotificationProvider>
+        <AuthProvider>
+          <JobsDrawerProvider>
+            <MemoryRouter initialEntries={['/analysis']}>
+              <AppRoutes />
+            </MemoryRouter>
+          </JobsDrawerProvider>
+        </AuthProvider>
+      </NotificationProvider>
+    );
+    expect(screen.getByText('Upload Data Files (Single or Multiple)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+    expect(screen.getByText('Main Features')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Analysis Tool' }));
+    expect(screen.getByText('Upload Data Files (Single or Multiple)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'About' }));
+    expect(screen.getByText('Documentation · Overview')).toBeTruthy();
   });
 });

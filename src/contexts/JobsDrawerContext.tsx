@@ -41,10 +41,11 @@ export function useRegisterAnalysisDrawer(handlers: AnalysisDrawerHandlers) {
   const ctx = useJobsDrawer();
   const ref = useRef(handlers);
   ref.current = handlers;
+  const setHandlers = ctx?.setHandlers;
 
   React.useEffect(() => {
-    if (!ctx) return;
-    ctx.setHandlers({
+    if (!setHandlers) return;
+    setHandlers({
       onLoadJobAsSession: (jobId) => ref.current.onLoadJobAsSession(jobId),
       onConnectJobToSession: async (jobId) => ref.current.onConnectJobToSession?.(jobId),
       currentSessionId: handlers.currentSessionId,
@@ -52,6 +53,6 @@ export function useRegisterAnalysisDrawer(handlers: AnalysisDrawerHandlers) {
       onRefreshActiveSheet: () => ref.current.onRefreshActiveSheet?.(),
       onOpenSession: async (sid) => ref.current.onOpenSession?.(sid),
     });
-    return () => ctx.setHandlers(null);
-  }, [ctx, handlers.currentSessionId, handlers.connectedJobId]);
+    return () => setHandlers(null);
+  }, [setHandlers, handlers.currentSessionId, handlers.connectedJobId]);
 }
